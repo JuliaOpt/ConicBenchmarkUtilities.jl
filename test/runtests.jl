@@ -31,3 +31,47 @@ status = solve(mj)
 
 @test_approx_eq_eps x_sol getvalue(x) 1e-6
 @test_approx_eq_eps -objval getobjectivevalue(mj) 1e-6
+
+# test transformation utilities
+
+# SOCRotated1 from MathProgBase conic tests
+c = [ 0.0, 0.0, -1.0, -1.0]
+A = [ 1.0  0.0   0.0   0.0
+      0.0  1.0   0.0   0.0]
+b = [ 0.5, 1.0]
+con_cones = [(:Zero,1:2)]
+var_cones = [(:SOCRotated,1:4)]
+vartypes = fill(:Cont,4)
+c, A, b, con_cones, var_cones, vartypes = socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
+
+@test c == [0.0,0.0,-1.0,-1.0]
+@test b == [0.5,1.0,0.0,0.0,0.0,0.0]
+@test_approx_eq A [1.0 0.0 0.0 0.0
+                   0.0 1.0 0.0 0.0
+                  -1.0 -1.0 0.0 0.0
+                  -1.0 1.0 0.0 0.0
+                   0.0 0.0 -1.4142135623730951 0.0
+                   0.0 0.0 0.0 -1.4142135623730951]
+@test var_cones == [(:Free,1:4)]
+@test con_cones == [(:Zero,1:2),(:SOC,3:6)]
+
+c = [-1.0,-1.0]
+A = [0.0 0.0; 0.0 0.0; -1.0 0.0; 0.0 -1.0]
+b = [0.5, 1.0, 0.0, 0.0]
+con_cones = [(:SOCRotated,1:4)]
+var_cones = [(:Free,1:2)]
+vartypes = fill(:Cont,2)
+c, A, b, con_cones, var_cones, vartypes = socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
+
+@test c == [-1.0,-1.0,0.0,0.0,0.0,0.0]
+@test b == [0.5,1.0,0.0,0.0,0.0,0.0,0.0,0.0]
+@test A == [0.0 0.0 1.0 0.0 0.0 0.0
+ 0.0 0.0 0.0 1.0 0.0 0.0
+ -1.0 0.0 0.0 0.0 1.0 0.0
+ 0.0 -1.0 0.0 0.0 0.0 1.0
+ 0.0 0.0 -1.0 -1.0 0.0 0.0
+ 0.0 0.0 -1.0 1.0 0.0 0.0
+ 0.0 0.0 0.0 0.0 -1.4142135623730951 0.0
+ 0.0 0.0 0.0 0.0 0.0 -1.4142135623730951]
+@test var_cones == [(:Free,1:2),(:Free,3:6)]
+@test con_cones == [(:Zero,1:4),(:SOC,5:8)]
