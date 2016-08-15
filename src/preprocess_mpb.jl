@@ -65,14 +65,16 @@ function remove_ints_in_nonlinear_cones(c, A, b, con_cones, var_cones, vartypes)
             push!(new_var_cones, (cname, collect(cidx)))
         end
     end
-    push!(new_var_cones, (:Free, dropped_idx))
-    append!(c, zeros(nslack))
-    append!(b, zeros(nslack))
-    append!(vartypes, fill(:Cont, nslack))
-    push!(con_cones, (:Zero, collect((size(A,1)+1):(size(A,1)+nslack))))
+    if length(dropped_idx) > 0
+        push!(new_var_cones, (:Free, dropped_idx))
+        append!(c, zeros(nslack))
+        append!(b, zeros(nslack))
+        append!(vartypes, fill(:Cont, nslack))
+        push!(con_cones, (:Zero, collect((size(A,1)+1):(size(A,1)+nslack))))
 
-    A = [A spzeros(size(A,1),nslack)]
-    A = vcat(A, sparse(I,J,V,nslack,size(A,2)))
+        A = [A spzeros(size(A,1),nslack)]
+        A = vcat(A, sparse(I,J,V,nslack,size(A,2)))
+    end
 
     return c, A, b, con_cones, new_var_cones, vartypes
 
