@@ -3,6 +3,7 @@
 
 # A few utilities to normalize the MPB representation
 
+# Remove :Zero cones from the variable cones
 function remove_zero_varcones(c, A, b, con_cones, var_cones, vartypes)
     old_to_new_idx = zeros(Int,length(c))
     last_idx = 1
@@ -27,7 +28,57 @@ function remove_zero_varcones(c, A, b, con_cones, var_cones, vartypes)
     return c, A, b, con_cones, var_cones, vartypes
 end
 
+# Introduce extra variables so that integer-constrained variables don't appear in nonlinear cones
+function remove_ints_in_nonlinear_cones(c, A, b, con_cones, var_cones, vartypes)
+    c = copy(c)
+    b = copy(b)
+    new_var_cones = Vector{Tuple{Symbol,Vector{Int}}}(0)
+    con_cones = map((a) -> (a[1],collect(a[2])), con_cones)
+    vartypes = copy(vartypes)
 
+    nslack = 0
+    dropped_idx = Int[]
+    I = Int[]
+    J = Int[]
+    V = Float64[]
+    for k in 1:length(var_cones)
+        cname, cidx = var_cones[k]
+        if !(cname ∈ (:Zero, :NonPos, :NonNeg, :Free))
+            new_cidx = Int[]
+            for i in cidx
+                if vartypes[i] != :Cont
+                    nslack += 1
+                    push!(I,nslack)
+                    push!(J,i)
+                    push!(V,1.0)
+                    push!(I,nslack)
+                    push!(J,nslack+length(c))
+                    push!(V,-1.0)
+                    push!(new_cidx,nslack+length(c))
+                    push!(dropped_idx, i)
+                else
+                    push!(new_cidx,i)
+                end
+            end
+            push!(new_var_cones, (cname,new_cidx))
+        else
+            push!(new_var_cones, (cname, collect(cidx)))
+        end
+    end
+    push!(new_var_cones, (:Free, dropped_idx))
+    append!(c, zeros(nslack))
+    append!(b, zeros(nslack))
+    append!(vartypes, fill(:Cont, nslack))
+    push!(con_cones, (:Zero, collect((size(A,1)+1):(size(A,1)+nslack))))
+
+    A = [A spzeros(size(A,1),nslack)]
+    A = vcat(A, sparse(I,J,V,nslack,size(A,2)))
+
+    return c, A, b, con_cones, new_var_cones, vartypes
+
+end
+
+# Translate all SOCRotated cones to SOCs
 function socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
 
     con_cones = copy(con_cones)

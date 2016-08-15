@@ -75,3 +75,20 @@ c, A, b, con_cones, var_cones, vartypes = socrotated_to_soc(c, A, b, con_cones, 
  0.0 0.0 0.0 0.0 0.0 -1.4142135623730951]
 @test var_cones == [(:Free,1:2),(:Free,3:6)]
 @test con_cones == [(:Zero,1:4),(:SOC,5:8)]
+
+# SOCINT1
+c = [ 0.0, -2.0, -1.0]
+A = sparse([ 1.0   0.0   0.0])
+b = [ 1.0]
+con_cones = [(:Zero,1)]
+var_cones = [(:SOC,1:3)]
+vartypes = [:Cont,:Bin,:Bin]
+
+c, A, b, con_cones, var_cones, vartypes = remove_ints_in_nonlinear_cones(c, A, b, con_cones, var_cones, vartypes)
+@test c == [0.0,-2.0,-1.0,0.0,0.0]
+@test b == [1.0,0.0,0.0]
+@test A == [1.0 0.0 0.0 0.0 0.0
+ 0.0 1.0 0.0 -1.0 0.0
+ 0.0 0.0 1.0 0.0 -1.0]
+@test var_cones == [(:SOC,[1,4,5]),(:Free,[2,3])]
+@test con_cones == [(:Zero,[1]),(:Zero,[2,3])]
