@@ -1,6 +1,7 @@
 module ConicBenchmarkUtilities
 
 using GZip
+using Requires
 import Compat: String
 
 export readcbfdata, cbftompb, mpbtocbf, writecbfdata
@@ -10,5 +11,6 @@ include("cbf_input.jl")
 include("cbf_output.jl")
 include("mpb.jl")
 include("preprocess_mpb.jl")
+include("convex_to_cbf.jl")
 
 end # module

@@ -111,7 +111,7 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
         end
     end
 
-    return CBFData(name,sense,var,con,objvec,0.0,acoord,bcoord,isint,length(b),length(c))
+    return CBFData(name,sense,var,con,objvec,0.0,acoord,bcoord,isint,length(c),length(b))
 
 
 end
