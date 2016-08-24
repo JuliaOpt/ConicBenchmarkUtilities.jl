@@ -33,7 +33,7 @@ function remove_ints_in_nonlinear_cones(c, A, b, con_cones, var_cones, vartypes)
     c = copy(c)
     b = copy(b)
     new_var_cones = Vector{Tuple{Symbol,Vector{Int}}}(0)
-    con_cones = map((a) -> (a[1],collect(a[2])), con_cones)
+    con_cones = map((a) -> (a[1],vec(collect(a[2]))), con_cones)
     vartypes = copy(vartypes)
 
     nslack = 0
