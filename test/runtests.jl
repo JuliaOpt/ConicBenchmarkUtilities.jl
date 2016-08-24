@@ -32,6 +32,12 @@ status = solve(mj)
 @test_approx_eq_eps x_sol getvalue(x) 1e-6
 @test_approx_eq_eps -objval getobjectivevalue(mj) 1e-6
 
+# test CBF writer
+newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
+writecbfdata("example_out.cbf",newdat,"# Example C.4 from the CBF documentation version 2")
+@test readall("example.cbf") == readall("example_out.cbf")
+rm("example_out.cbf")
+
 # test transformation utilities
 
 # SOCRotated1 from MathProgBase conic tests
