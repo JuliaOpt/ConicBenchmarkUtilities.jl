@@ -1,10 +1,14 @@
 
 const conemap = Dict("L=" => :Zero, "F" => :Free,
                      "L-" => :NonPos, "L+" => :NonNeg,
-                     "Q" => :SOC, "QR" => :SOCRotated)
+                     "Q" => :SOC, "QR" => :SOCRotated,
+                     "EXP" => :ExpPrimal)
+                     #"EXP*" => :ExpDual)
 const conemap_rev = Dict(:Zero => "L=", :Free => "F",
                      :NonPos => "L-", :NonNeg => "L+",
-                     :SOC => "Q", :SOCRotated => "QR")
+                     :SOC => "Q", :SOCRotated => "QR",
+                     :ExpPrimal => "EXP")
+                     #, :ExpDual => "EXP*")
 
 function cbfcones_to_mpbcones(c::Vector{Tuple{String,Int}},total)
     i = 1
@@ -12,7 +16,12 @@ function cbfcones_to_mpbcones(c::Vector{Tuple{String,Int}},total)
 
     for (cname,count) in c
         conesymbol = conemap[cname]
-        indices = i:(i+count-1)
+        if conesymbol == :ExpPrimal
+            @assert count == 3
+            indices = i+2:-1:i
+        else
+            indices = i:(i+count-1)
+        end
         push!(mpb_cones, (conesymbol, collect(indices)))
         i += count
     end
@@ -68,11 +77,20 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
 
     i = 1
     for (cone,idx) in var_cones
-        for k in idx
-            @assert var_idx_old_to_new[k] == 0
-            var_idx_old_to_new[k] = i
-            var_idx_new_to_old[i] = k
-            i += 1
+        if cone == :ExpPrimal
+            @assert all(var_idx_old_to_new[idx] .== 0)
+            @assert length(idx) == 3
+            # MPB: (x,y,z) : y*exp(x/y) <= z
+            # CBF: (z,y,x) : y*exp(x/y) <= z
+            var_idx_old_to_new[idx] = i+2:-1:i
+            var_idx_new_to_old[i+2:-1:i] = idx
+            i += 3
+        else
+            for k in idx
+                var_idx_old_to_new[k] = i
+                var_idx_new_to_old[i] = k
+                i += 1
+            end
         end
         push!(var, (conemap_rev[cone],length(idx)))
     end
@@ -80,11 +98,19 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
 
     i = 1
     for (cone,idx) in con_cones
-        for k in idx
-            @assert con_idx_old_to_new[k] == 0
-            con_idx_old_to_new[k] = i
-            con_idx_new_to_old[i] = k
-            i += 1
+        if cone == :ExpPrimal
+            @assert all(con_idx_old_to_new[idx] .== 0)
+            @assert length(idx) == 3
+            con_idx_old_to_new[idx] = i+2:-1:i
+            con_idx_new_to_old[i+2:-1:i] = idx
+            i += 3
+        else
+            for k in idx
+                @assert con_idx_old_to_new[k] == 0
+                con_idx_old_to_new[k] = i
+                con_idx_new_to_old[i] = k
+                i += 1
+            end
         end
         push!(con, (conemap_rev[cone],length(idx)))
     end
