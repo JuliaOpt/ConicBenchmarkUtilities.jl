@@ -36,7 +36,7 @@ status = solve(mj)
 # test CBF writer
 newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
 writecbfdata("example_out.cbf",newdat,"# Example C.4 from the CBF documentation version 2")
-@test readall("example.cbf") == readall("example_out.cbf")
+@test readstring("example.cbf") == readstring("example_out.cbf")
 rm("example_out.cbf")
 
 # test transformation utilities
@@ -142,7 +142,7 @@ BCOORD
 4 -1.0
 """
 
-@test readall("exptest.cbf") == output
+@test readstring("exptest.cbf") == output
 
 c, A, b, con_cones, var_cones, vartypes, sense, objoffset = cbftompb(readcbfdata("exptest.cbf"))
 
