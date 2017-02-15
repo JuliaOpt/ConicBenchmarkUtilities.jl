@@ -2,7 +2,7 @@
 language: julia
 os:
   - linux
-  - osx
+#  - osx # disabled until queues are reasonable
 julia:
   - 0.5
   - nightly
