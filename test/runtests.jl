@@ -1,5 +1,5 @@
 using Base.Test
-using ECOS, MathProgBase, JuMP
+using ECOS, MathProgBase
 import Convex
 using ConicBenchmarkUtilities
 
@@ -23,15 +23,12 @@ MathProgBase.optimize!(m)
 x_sol = MathProgBase.getsolution(m)
 objval = MathProgBase.getobjval(m)
 
-mj = Model(solver=ECOSSolver(verbose=0))
-@variable(mj, x[1:2])
-@objective(mj, Max, x[1] + 0.64x[2])
-@constraint(mj, 50x[1] + 31x[2] <= 250)
-@constraint(mj, 3x[1] - 2x[2] >= -4)
-status = solve(mj)
+x = Convex.Variable(2)
+pj = Convex.maximize(x[1] + 0.64x[2], 50x[1] + 31x[2] <= 250, 3x[1] - 2x[2] >= -4)
+Convex.solve!(pj, ECOSSolver(verbose=0))
 
-@test_approx_eq_eps x_sol getvalue(x) 1e-6
-@test_approx_eq_eps -objval getobjectivevalue(mj) 1e-6
+@test_approx_eq_eps x_sol Convex.evaluate(x) 1e-6
+@test_approx_eq_eps -objval pj.optval 1e-6
 
 # test CBF writer
 newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
