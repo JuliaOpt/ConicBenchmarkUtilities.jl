@@ -5,12 +5,12 @@ type CBFData
     psdvar::Vector{Int}
     con::Vector{Tuple{String,Int}}
     psdcon::Vector{Int}
-    objvec::Vector{Float64}
+    objacoord::Vector{Tuple{Int,Float64}}
     objfcoord::Vector{Tuple{Int,Int,Int,Float64}}
     objoffset::Float64
     fcoord::Vector{Tuple{Int,Int,Int,Int,Float64}}
     acoord::Vector{Tuple{Int,Int,Float64}} # linear coefficients
-    bcoord::Vector{Float64} # linear offsets
+    bcoord::Vector{Tuple{Int,Float64}} # linear offsets
     hcoord::Vector{Tuple{Int,Int,Int,Int,Float64}}
     dcoord::Vector{Tuple{Int,Int,Int,Float64}}
     intlist::Vector{Int}
@@ -82,7 +82,6 @@ function readcbfdata(filename)
             end
             @assert totalvars == varcnt
             dat.nvar = varcnt
-            dat.objvec = zeros(dat.nvar)
             continue
         end
 
@@ -113,7 +112,6 @@ function readcbfdata(filename)
             end
             @assert totalconstr == constrcnt
             dat.nconstr = constrcnt
-            dat.bcoord = zeros(dat.nconstr)
             continue
         end
 
@@ -142,14 +140,7 @@ function readcbfdata(filename)
         end
 
         if startswith(line,"OBJACOORD")
-            nextline = readline(fd)
-            nnz = parse(Int,strip(nextline))
-            for k in 1:nnz
-                nextline = readline(fd)
-                i, val = split(strip(nextline))
-                dat.objvec[parse(Int,i)+1] = float(val)
-            end
-            continue
+            parse_matblock(fd,dat.objacoord,1)
         end
 
         if startswith(line,"OBJBCOORD")
@@ -158,15 +149,8 @@ function readcbfdata(filename)
             warn("Instance has objective offset")
         end
 
-
         if startswith(line,"BCOORD")
-            nextline = readline(fd)
-            nnz = parse(Int,strip(nextline))
-            for k in 1:nnz
-                nextline = readline(fd)
-                i, val = split(strip(nextline))
-                dat.bcoord[parse(Int,i)+1] = float(val)
-            end
+            parse_matblock(fd,dat.bcoord,1)
         end
 
         if startswith(line,"ACOORD")

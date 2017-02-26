@@ -24,6 +24,15 @@ function writecbfdata(filename,dat::CBFData, comments="")
     end
     println(fd)
 
+    if length(dat.psdvar) > 0
+        println(fd, "PSDVAR")
+        println(fd, length(dat.psdvar))
+        for v in dat.psdvar
+            println(fd, v)
+        end
+        println(fd)
+    end
+
     println(fd,"VAR")
     println(fd,dat.nvar, " ", length(dat.var))
     for (cone,nvar) in dat.var
@@ -40,33 +49,83 @@ function writecbfdata(filename,dat::CBFData, comments="")
         println(fd)
     end
 
+    if length(dat.psdcon) > 0
+        println(fd, "PSDCON")
+        println(fd, length(dat.psdcon))
+        for v in dat.psdcon
+            println(fd, v)
+        end
+        println(fd)
+    end
+
     println(fd,"CON")
     println(fd,dat.nconstr, " ", length(dat.con))
     for (cone,ncon) in dat.con
         println(fd, cone, " ", ncon)
     end
     println(fd)
-    
-    println(fd,"OBJACOORD")
-    I = find(dat.objvec)
-    println(fd,length(I))
-    for i in I
-        println(fd,i-1," ",dat.objvec[i])
-    end
-    println(fd)
 
-    println(fd,"ACOORD")
-    println(fd,length(dat.acoord))
-    for (i,j,v) in dat.acoord
-        println(fd,"$(i-1) $(j-1) $v")
+    if length(dat.objfcoord) > 0
+        println(fd,"OBJFCOORD")
+        println(fd,length(dat.objfcoord))
+        for (a,b,c,d) in dat.objfcoord
+            println(fd, a-1, " ", b-1, " ", c-1, " ", d)
+        end
+        println(fd)
     end
-    println(fd)
 
-    println(fd,"BCOORD")
-    I = find(dat.bcoord)
-    println(fd,length(I))
-    for i in I
-        println(fd,i-1," ",dat.bcoord[i])
+    if length(dat.objacoord) > 0
+        println(fd,"OBJACOORD")
+        println(fd,length(dat.objacoord))
+        for (i,v) in dat.objacoord
+            println(fd,i-1," ",v)
+        end
+        println(fd)
+    end
+
+    if length(dat.fcoord) > 0
+        println(fd,"FCOORD")
+        println(fd,length(dat.fcoord))
+        for (a,b,c,d,e) in dat.fcoord
+            println(fd,a-1," ",b-1," ",c-1," ",d-1," ",e)
+        end
+        println(fd)
+    end
+
+    if length(dat.acoord) > 0
+        println(fd,"ACOORD")
+        println(fd,length(dat.acoord))
+        for (i,j,v) in dat.acoord
+            println(fd,i-1," ",j-1," ",v)
+        end
+        println(fd)
+    end
+
+    if length(dat.hcoord) > 0
+        println(fd,"HCOORD")
+        println(fd,length(dat.hcoord))
+        for (a,b,c,d,e) in dat.hcoord
+            println(fd,a-1," ",b-1," ",c-1," ",d-1," ",e)
+        end
+        println(fd)
+    end
+
+    if length(dat.dcoord) > 0
+        println(fd,"DCOORD")
+        println(fd,length(dat.dcoord))
+        for (a,b,c,d) in dat.dcoord
+            println(fd, a-1, " ", b-1, " ", c-1, " ", d)
+        end
+        println(fd)
+    end
+
+    if length(dat.bcoord) > 0
+        println(fd,"BCOORD")
+        println(fd,length(dat.bcoord))
+        for (i,v) in dat.bcoord
+            println(fd,i-1," ",v)
+        end
+        println(fd)
     end
 
     close(fd)

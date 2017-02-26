@@ -59,14 +59,19 @@ function cbftompb(dat::CBFData)
     @assert dat.nvar == sum(c->c[2],dat.var)
     @assert dat.nconstr == sum(c->c[2],dat.con)
 
-    c = copy(dat.objvec)
+    c = zeros(dat.nvar)
+    for (i,v) in dat.objacoord
+        c[i] = v
+    end
 
     var_cones = cbfcones_to_mpbcones(dat.var, dat.nvar) 
     con_cones = cbfcones_to_mpbcones(dat.con, dat.nconstr)
     
     I_A, J_A, V_A = unzip(dat.acoord)
-    b = copy(dat.bcoord)
-
+    b = zeros(dat.nconstr)
+    for (i,v) in dat.bcoord
+        b[i] = v
+    end
 
     psdvarstartidx = Int[]
     for i in 1:length(dat.psdvar)
@@ -135,17 +140,28 @@ end
 
 function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
 
+    num_scalar_var = 0
+    for (cone,idx) in var_cones
+        if cone != :SDP
+            num_scalar_var += length(idx)
+        end
+    end
+    num_scalar_con = 0
+    for (cone,idx) in con_cones
+        if cone != :SDP
+            num_scalar_con += length(idx)
+        end
+    end
+
     # need to shuffle rows and columns to put them in order
     var_idx_old_to_new = zeros(Int,length(c))
     con_idx_old_to_new = zeros(Int,length(b))
-    var_idx_new_to_old = zeros(Int,length(c))
-    con_idx_new_to_old = zeros(Int,length(b))
+    var_idx_new_to_old = zeros(Int,num_scalar_var)
+    con_idx_new_to_old = zeros(Int,num_scalar_con)
 
     # CBF fields
     var = Vector{Tuple{String,Int}}(0)
-    psdvar = Int[]
     con = Vector{Tuple{String,Int}}(0)
-    psdcon = Int[]
 
     i = 1
     for (cone,idx) in var_cones
@@ -157,17 +173,17 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
             var_idx_old_to_new[idx] = i+2:-1:i
             var_idx_new_to_old[i+2:-1:i] = idx
             i += 3
-        else
-            @assert cone != :SDP
+            push!(var, (conemap_rev[cone],length(idx)))
+        elseif cone != :SDP
             for k in idx
                 var_idx_old_to_new[k] = i
                 var_idx_new_to_old[i] = k
                 i += 1
             end
+            push!(var, (conemap_rev[cone],length(idx)))
         end
-        push!(var, (conemap_rev[cone],length(idx)))
     end
-    @assert i - 1 == length(c)
+    @assert i - 1 == num_scalar_var
 
     i = 1
     for (cone,idx) in con_cones
@@ -177,21 +193,21 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
             con_idx_old_to_new[idx] = i+2:-1:i
             con_idx_new_to_old[i+2:-1:i] = idx
             i += 3
-        else
-            @assert cone != :SDP
+            push!(con, (conemap_rev[cone],length(idx)))
+        elseif cone != :SDP
             for k in idx
                 @assert con_idx_old_to_new[k] == 0
                 con_idx_old_to_new[k] = i
                 con_idx_new_to_old[i] = k
                 i += 1
             end
+            push!(con, (conemap_rev[cone],length(idx)))
         end
-        push!(con, (conemap_rev[cone],length(idx)))
     end
-    @assert i - 1 == length(b)
+    @assert i - 1 == num_scalar_con
 
-    objvec = c[var_idx_new_to_old]
-    bcoord = b[con_idx_new_to_old]
+    objacoord = collect(zip(findnz(sparse(c[var_idx_new_to_old]))...))
+    bcoord = collect(zip(findnz(sparse(b[con_idx_new_to_old]))...))
     # MPB is b - Ax ∈ K, CBF is b + Ax ∈ K
     Acbf = -A[con_idx_new_to_old,var_idx_new_to_old]
 
@@ -199,25 +215,97 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
 
     intlist = Int[]
     for i in 1:length(vartypes)
+        if var_idx_old_to_new[i] == 0 && vartypes[i] != :Cont
+            error("CBF format does not support integer restrictions on PSD variables")
+        end
         if vartypes[i] == :Cont
         elseif vartypes[i] == :Int
-            push!(intlist,i)
+            push!(intlist,var_idx_old_to_new[i])
         elseif vartypes[i] == :Bin
             # TODO: Check if we need to add variable bounds also
-            push!(intlist,i)
+            push!(intlist,var_idx_old_to_new[i])
         else
             error("Unrecognized variable category $(vartypes[i])")
         end
     end
 
-    # SDP not supported yet
-    objfcoord = []
-    fcoord = []
-    hcoord = []
-    dcoord = []
 
+    psdvar = Int[]
+    psdcon = Int[]
 
-    return CBFData(name,sense,var,psdvar,con,psdcon,objvec,objfcoord,0.0,fcoord,acoord,bcoord,hcoord,dcoord,intlist,length(c),length(b))
+    # Map from MPB linear variable index to (psdvar,i,j)
+    psdvar_idx_old_to_new = fill((0,0,0), length(c))
+    # Map from MPB linear constraint index to (psdcon,i,j)
+    psdcon_idx_old_to_new = fill((0,0,0),length(b))
+
+    for (cone,idx) in var_cones
+        if cone == :SDP
+            y = length(idx)
+            conedim = round(Int, sqrt(0.25 + 2y) - 0.5)
+            push!(psdvar, conedim)
+            k = 1
+            for i in 1:conedim, j in i:conedim
+                psdvar_idx_old_to_new[idx[k]] = (length(psdvar), i, j)
+                k += 1
+            end
+            @assert length(idx) == k - 1
+        end
+    end
+
+    for (cone,idx) in con_cones
+        if cone == :SDP
+            y = length(idx)
+            conedim = round(Int, sqrt(0.25 + 2y) - 0.5)
+            push!(psdcon, conedim)
+            k = 1
+            for i in 1:conedim, j in i:conedim
+                psdcon_idx_old_to_new[idx[k]] = (length(psdcon), i, j)
+                k += 1
+            end
+            @assert length(idx) == k - 1
+        end
+    end
+
+    objfcoord = Vector{Tuple{Int,Int,Int,Float64}}(0)
+    for i in 1:length(c)
+        if c[i] != 0.0 && psdvar_idx_old_to_new[i] != (0,0,0)
+            varidx, vari, varj = psdvar_idx_old_to_new[i]
+            scale = (vari == varj) ? 1.0 : 1/sqrt(2)
+            push!(objfcoord, (varidx, vari, varj, scale*c[i]))
+        end
+    end
+    dcoord = Vector{Tuple{Int,Int,Int,Float64}}(0)
+    for i in 1:length(b)
+        if b[i] != 0.0 && psdcon_idx_old_to_new[i] != (0,0,0)
+            conidx, coni, conj = psdcon_idx_old_to_new[i]
+            scale = (coni == conj) ? 1.0 : 1/sqrt(2)
+            push!(dcoord, (conidx, coni, conj, scale*b[i]))
+        end
+    end
+
+    A_I, A_J, A_V = findnz(A)
+    fcoord = Vector{Tuple{Int,Int,Int,Int,Float64}}(0)
+    hcoord = Vector{Tuple{Int,Int,Int,Int,Float64}}(0)
+
+    for (i,j,v) in zip(A_I,A_J,A_V)
+        if psdvar_idx_old_to_new[j] != (0,0,0)
+            if psdcon_idx_old_to_new[i] != (0,0,0)
+                error("CBF format does not allow PSD variables to appear in affine expressions defining PSD constraints")
+            end
+            newrow = con_idx_old_to_new[i]
+            @assert newrow != 0
+            varidx, vari, varj = psdvar_idx_old_to_new[j]
+            scale = (vari == varj) ? 1.0 : 1/sqrt(2)
+            push!(fcoord, (newrow, varidx, vari, varj, -scale*v))
+        elseif psdcon_idx_old_to_new[i] != (0,0,0)
+            newcol = var_idx_old_to_new[j]
+            conidx, coni, conj = psdcon_idx_old_to_new[i]
+            scale = (coni == conj) ? 1.0 : 1/sqrt(2)
+            push!(hcoord, (conidx, newcol, coni, conj, -scale*v))
+        end
+    end
+
+    return CBFData(name,sense,var,psdvar,con,psdcon,objacoord,objfcoord,0.0,fcoord,acoord,bcoord,hcoord,dcoord,intlist,num_scalar_var,num_scalar_con)
 
 
 end
