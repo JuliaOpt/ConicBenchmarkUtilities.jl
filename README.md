@@ -25,6 +25,8 @@ MathProgBase.optimize!(m)
 # Solution accessible through:
 x_sol = MathProgBase.getsolution(m)
 objval = MathProgBase.getobjval(m)
+# If PSD vars are present, you can use the following utility to extract the solution in CBF form:
+scalar_solution, psdvar_solution = ConicBenchmarkUtilities.mpb_sol_to_cbf(dat,x_sol)
 ```
 
 ## How to write a CBF instance:

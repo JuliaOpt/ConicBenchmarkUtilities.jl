@@ -2,17 +2,34 @@ type CBFData
     name::String
     sense::Symbol
     var::Vector{Tuple{String,Int}}
+    psdvar::Vector{Int}
     con::Vector{Tuple{String,Int}}
-    objvec::Vector{Float64}
+    psdcon::Vector{Int}
+    objacoord::Vector{Tuple{Int,Float64}}
+    objfcoord::Vector{Tuple{Int,Int,Int,Float64}}
     objoffset::Float64
+    fcoord::Vector{Tuple{Int,Int,Int,Int,Float64}}
     acoord::Vector{Tuple{Int,Int,Float64}} # linear coefficients
-    bcoord::Vector{Float64} # linear offsets
-    isint::Vector{Bool}
+    bcoord::Vector{Tuple{Int,Float64}} # linear offsets
+    hcoord::Vector{Tuple{Int,Int,Int,Int,Float64}}
+    dcoord::Vector{Tuple{Int,Int,Int,Float64}}
+    intlist::Vector{Int}
     nvar::Int
     nconstr::Int
 end
 
-CBFData() = CBFData("",:xxx,Vector{Tuple{String,Int}}(0),Vector{Tuple{String,Int}}(0),Vector{Float64}(),0.0,Vector{Tuple{Int,Int,Float64}}(0),Vector{Float64}(),Vector{Bool}(0),0,0)
+CBFData() = CBFData("",:xxx,[],[],[],[],[],[],0.0,[],[],[],[],[],[],0,0)
+
+function parse_matblock(fd,outputmat,num_indices)
+    nextline = readline(fd)
+    nnz = parse(Int,strip(nextline))
+    for k in 1:nnz
+        nextline = readline(fd)
+        tup = split(strip(nextline))
+        push!(outputmat, (map(s->parse(Int,s)+1,tup[1:num_indices])...,parse(Float64,tup[end])))
+    end
+end
+
 
 function readcbfdata(filename)
 
@@ -58,10 +75,10 @@ function readcbfdata(filename)
 
             for k in 1:lines
                 nextline = readline(fd)
-                cone, size = split(nextline)
-                size = parse(Int,strip(size))
-                push!(dat.var, (cone, size))
-                varcnt += size
+                cone, sz = split(nextline)
+                sz = parse(Int,strip(sz))
+                push!(dat.var, (cone, sz))
+                varcnt += sz
             end
             @assert totalvars == varcnt
             dat.nvar = varcnt
@@ -71,12 +88,10 @@ function readcbfdata(filename)
         if startswith(line, "INT")
             nextline = readline(fd)
             intvar = parse(Int,strip(nextline))
-            dat.isint = falses(dat.nvar)
-            # ignore integer variables
             for k in 1:intvar
                 nextline = readline(fd)
                 idx = parse(Int,strip(nextline))
-                dat.isint[idx+1] = true
+                push!(dat.intlist,idx+1)
             end
             continue
         end
@@ -90,31 +105,42 @@ function readcbfdata(filename)
 
             for k in 1:lines
                 nextline = readline(fd)
-                cone, size = split(nextline)
-                size = parse(Int,strip(size))
-                push!(dat.con, (cone, size))
-                constrcnt += size
+                cone, sz = split(nextline)
+                sz = parse(Int,strip(sz))
+                push!(dat.con, (cone, sz))
+                constrcnt += sz
             end
             @assert totalconstr == constrcnt
             dat.nconstr = constrcnt
             continue
         end
 
-        if startswith(line,"PSDVAR") || startswith(line,"PSDCON")
-            error("Input problem is an SDP")
-            break
+        if startswith(line,"PSDVAR")
+            nextline = readline(fd)
+            lines = parse(Int,strip(nextline))
+
+            for k in 1:lines
+                nextline = readline(fd)
+                sz = parse(Int,strip(nextline))
+                push!(dat.psdvar, sz)
+            end
+            continue
+        end
+
+        if startswith(line,"PSDCON")
+            nextline = readline(fd)
+            lines = parse(Int,strip(nextline))
+
+            for k in 1:lines
+                nextline = readline(fd)
+                sz = parse(Int,strip(nextline))
+                push!(dat.psdcon, sz)
+            end
+            continue
         end
 
         if startswith(line,"OBJACOORD")
-            nextline = readline(fd)
-            nnz = parse(Int,strip(nextline))
-            dat.objvec = zeros(dat.nvar)
-            for k in 1:nnz
-                nextline = readline(fd)
-                i, val = split(strip(nextline))
-                dat.objvec[parse(Int,i)+1] = float(val)
-            end
-            continue
+            parse_matblock(fd,dat.objacoord,1)
         end
 
         if startswith(line,"OBJBCOORD")
@@ -123,25 +149,28 @@ function readcbfdata(filename)
             warn("Instance has objective offset")
         end
 
-        if startswith(line,"ACOORD")
-            nextline = readline(fd)
-            nnz = parse(Int,strip(nextline))
-            for k in 1:nnz
-                nextline = readline(fd)
-                i, j, val = split(strip(nextline))
-                push!(dat.acoord, (parse(Int,i)+1,parse(Int,j)+1,parse(Float64,val)))
-            end
+        if startswith(line,"BCOORD")
+            parse_matblock(fd,dat.bcoord,1)
         end
 
-        if startswith(line,"BCOORD")
-            nextline = readline(fd)
-            nnz = parse(Int,strip(nextline))
-            dat.bcoord = zeros(dat.nconstr)
-            for k in 1:nnz
-                nextline = readline(fd)
-                i, val = split(strip(nextline))
-                dat.bcoord[parse(Int,i)+1] = float(val)
-            end
+        if startswith(line,"ACOORD")
+            parse_matblock(fd,dat.acoord,2)
+        end
+
+        if startswith(line,"OBJFCOORD")
+            parse_matblock(fd,dat.objfcoord,3)
+        end
+
+        if startswith(line,"FCOORD")
+            parse_matblock(fd,dat.fcoord,4)
+        end
+
+        if startswith(line,"HCOORD")
+            parse_matblock(fd,dat.hcoord,4)
+        end
+
+        if startswith(line,"DCOORD")
+            parse_matblock(fd,dat.dcoord,3)
         end
 
 
