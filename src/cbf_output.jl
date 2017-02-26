@@ -31,11 +31,10 @@ function writecbfdata(filename,dat::CBFData, comments="")
     end
     println(fd)
 
-    whichint = find(dat.isint)
-    if length(whichint) > 0
+    if length(dat.intlist) > 0
         println(fd, "INT")
-        println(fd, length(whichint))
-        for k in whichint
+        println(fd, length(dat.intlist))
+        for k in dat.intlist
             println(fd, k-1)
         end
         println(fd)

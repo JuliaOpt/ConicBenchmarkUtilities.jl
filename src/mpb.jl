@@ -41,23 +41,93 @@ function unzip{T<:Tuple}(A::Array{T})
     res
 end
 
+psd_len(n) = div(n*(n+1),2)
+# returns offset from starting index for (i,j) term in n x n matrix
+function idx_to_offset(n,i,j)
+    @assert 1 <= i <= n
+    @assert 1 <= j <= n
+    # upper triangle
+    if i > j
+        i,j = j,i
+    end
+    # think row major
+    return psd_len(n) - psd_len(n-i+1) + (j-i)
+end
+
 function cbftompb(dat::CBFData)
 
     @assert dat.nvar == sum(c->c[2],dat.var)
     @assert dat.nconstr == sum(c->c[2],dat.con)
 
-    c = dat.objvec
+    c = copy(dat.objvec)
 
     var_cones = cbfcones_to_mpbcones(dat.var, dat.nvar) 
     con_cones = cbfcones_to_mpbcones(dat.con, dat.nconstr)
     
-    I, J, V = unzip(dat.acoord)
-    A = sparse(I,J,-V,dat.nconstr,dat.nvar)
-    b = dat.bcoord
-    vartypes = fill(:Cont, dat.nvar)
-    if !isempty(dat.isint)
-        vartypes[dat.isint] = :Int
+    I_A, J_A, V_A = unzip(dat.acoord)
+    b = copy(dat.bcoord)
+
+
+    psdvarstartidx = Int[]
+    for i in 1:length(dat.psdvar)
+        if i == 1
+            push!(psdvarstartidx,dat.nvar+1)
+        else
+            push!(psdvarstartidx,psdvarstartidx[i-1] + psd_len(dat.psdvar[i-1]))
+        end
+        push!(var_cones,(:SDP,psdvarstartidx[i]:psdvarstartidx[i]+psd_len(dat.psdvar[i])-1))
     end
+    nvar = (length(dat.psdvar) > 0) ? psdvarstartidx[end] + psd_len(dat.psdvar[end]) - 1 : dat.nvar
+
+    psdconstartidx = Int[]
+    for i in 1:length(dat.psdcon)
+        if i == 1
+            push!(psdconstartidx,dat.nconstr+1)
+        else
+            push!(psdconstartidx,psdconstartidx[i-1] + psd_len(dat.psdcon[i-1]))
+        end
+        push!(con_cones,(:SDP,psdconstartidx[i]:psdconstartidx[i]+psd_len(dat.psdcon[i])-1))
+    end
+    nconstr = (length(dat.psdcon) > 0) ? psdconstartidx[end] + psd_len(dat.psdcon[end]) - 1 : dat.nconstr
+
+    c = [c;zeros(nvar-dat.nvar)]
+    for (matidx,i,j,v) in dat.objfcoord
+        ix = psdvarstartidx[matidx] + idx_to_offset(dat.psdvar[matidx],i,j)
+        @assert c[ix] == 0.0
+        scale = (i == j) ? 1.0 : sqrt(2)
+        c[ix] = scale*v
+    end
+
+    for (conidx,matidx,i,j,v) in dat.fcoord
+        ix = psdvarstartidx[matidx] + idx_to_offset(dat.psdvar[matidx],i,j)
+        push!(I_A,conidx)
+        push!(J_A,ix)
+        scale = (i == j) ? 1.0 : sqrt(2)
+        push!(V_A,scale*v)
+    end
+
+    for (conidx,varidx,i,j,v) in dat.hcoord
+        ix = psdconstartidx[conidx] + idx_to_offset(dat.psdcon[conidx],i,j)
+        push!(I_A,ix)
+        push!(J_A,varidx)
+        scale = (i == j) ? 1.0 : sqrt(2)
+        push!(V_A,scale*v)
+    end
+
+    b = [b;zeros(nconstr-dat.nconstr)]
+    for (conidx,i,j,v) in dat.dcoord
+        ix = psdconstartidx[conidx] + idx_to_offset(dat.psdcon[conidx],i,j)
+        @assert b[ix] == 0.0
+        scale = (i == j) ? 1.0 : sqrt(2)
+        b[ix] = scale*v
+    end
+
+    A = sparse(I_A,J_A,-V_A,nconstr,nvar)
+
+
+    vartypes = fill(:Cont, nvar)
+    vartypes[dat.intlist] = :Int
+
 
     return c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset
 
@@ -73,7 +143,9 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
 
     # CBF fields
     var = Vector{Tuple{String,Int}}(0)
+    psdvar = Int[]
     con = Vector{Tuple{String,Int}}(0)
+    psdcon = Int[]
 
     i = 1
     for (cone,idx) in var_cones
@@ -86,6 +158,7 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
             var_idx_new_to_old[i+2:-1:i] = idx
             i += 3
         else
+            @assert cone != :SDP
             for k in idx
                 var_idx_old_to_new[k] = i
                 var_idx_new_to_old[i] = k
@@ -105,6 +178,7 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
             con_idx_new_to_old[i+2:-1:i] = idx
             i += 3
         else
+            @assert cone != :SDP
             for k in idx
                 @assert con_idx_old_to_new[k] == 0
                 con_idx_old_to_new[k] = i
@@ -123,21 +197,60 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
 
     acoord = collect(zip(findnz(Acbf)...))::Vector{Tuple{Int,Int,Float64}}
 
-    isint = Vector{Bool}(0)
+    intlist = Int[]
     for i in 1:length(vartypes)
         if vartypes[i] == :Cont
-            push!(isint,false)
         elseif vartypes[i] == :Int
-            push!(isint,true)
+            push!(intlist,i)
         elseif vartypes[i] == :Bin
             # TODO: Check if we need to add variable bounds also
-            push!(isint,true)
+            push!(intlist,i)
         else
             error("Unrecognized variable category $(vartypes[i])")
         end
     end
 
-    return CBFData(name,sense,var,con,objvec,0.0,acoord,bcoord,isint,length(c),length(b))
+    # SDP not supported yet
+    objfcoord = []
+    fcoord = []
+    hcoord = []
+    dcoord = []
 
 
+    return CBFData(name,sense,var,psdvar,con,psdcon,objvec,objfcoord,0.0,fcoord,acoord,bcoord,hcoord,dcoord,intlist,length(c),length(b))
+
+
+end
+
+# converts an MPB solution to CBF solution
+# no transformation needed unless PSD vars present
+function mpb_sol_to_cbf(dat::CBFData,x::Vector)
+
+    scalar_solution = x[1:dat.nvar]
+
+    psdvar_solutions = Vector{Matrix{Float64}}(0)
+    startidx = dat.nvar+1
+    for i in 1:length(dat.psdvar)
+        endidx = startidx + psd_len(dat.psdvar[i]) - 1
+        svec_solution = x[startidx:endidx]
+        push!(psdvar_solutions, make_smat!(Matrix{Float64}(dat.psdvar[i],dat.psdvar[i]), svec_solution))
+        startidx = endidx + 1
+    end
+
+    return scalar_solution, psdvar_solutions
+end
+
+# Copied from Pajarito.jl
+function make_smat!(smat::Matrix{Float64}, svec::Vector{Float64})
+    dim = size(smat, 1)
+    kSD = 1
+    for jSD in 1:dim, iSD in jSD:dim
+        if jSD == iSD
+            smat[iSD, jSD] = svec[kSD]
+        else
+            smat[iSD, jSD] = smat[jSD, iSD] = (1/sqrt(2)) * svec[kSD]
+        end
+        kSD += 1
+    end
+    return smat
 end

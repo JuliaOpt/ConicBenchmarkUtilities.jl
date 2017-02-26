@@ -1,10 +1,11 @@
 using Base.Test
-using ECOS, MathProgBase
+using ECOS, SCS, MathProgBase
 import Convex
+import JuMP
 using ConicBenchmarkUtilities
 
 
-dat = readcbfdata("example.cbf")
+dat = readcbfdata("example4.cbf")
 
 c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset = cbftompb(dat)
 
@@ -33,7 +34,7 @@ Convex.solve!(pj, ECOSSolver(verbose=0))
 # test CBF writer
 newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
 writecbfdata("example_out.cbf",newdat,"# Example C.4 from the CBF documentation version 2")
-@test readstring("example.cbf") == readstring("example_out.cbf")
+@test readstring("example4.cbf") == readstring("example_out.cbf")
 rm("example_out.cbf")
 
 # test transformation utilities
@@ -155,3 +156,73 @@ x_sol = MathProgBase.getsolution(m)
 @test_approx_eq_eps MathProgBase.getobjval(m) exp(1) 1e-5
 
 rm("exptest.cbf")
+
+
+# SDP tests
+SCSSOLVER = SCSSolver(eps=1e-6,verbose=0)
+
+dat = readcbfdata("example1.cbf")
+c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset = cbftompb(dat)
+
+@test dat.sense == :Min
+@test dat.objoffset == 0.0
+@test all(vartypes .== :Cont)
+
+m = MathProgBase.ConicModel(SCSSOLVER)
+MathProgBase.loadproblem!(m, c, A, b, con_cones, var_cones)
+MathProgBase.optimize!(m)
+@test MathProgBase.status(m) == :Optimal
+
+scalar_solution, psdvar_solution = ConicBenchmarkUtilities.mpb_sol_to_cbf(dat,MathProgBase.getsolution(m))
+
+jm = JuMP.Model(solver=SCSSOLVER)
+@JuMP.variable(jm, x[1:3])
+@JuMP.variable(jm, X[1:3,1:3], SDP)
+
+
+@JuMP.objective(jm, Min, vecdot([2 1 0; 1 2 1; 0 1 2],X) + x[2])
+@JuMP.constraint(jm, X[1,1]+X[2,2]+X[3,3]+x[2] == 1.0)
+@JuMP.constraint(jm, vecdot(ones(3,3),X) + x[1] + x[3] == 0.5)
+@JuMP.constraint(jm, norm([x[1],x[3]]) <= x[2])
+@test JuMP.solve(jm) == :Optimal
+@test isapprox(JuMP.getobjectivevalue(jm), MathProgBase.getobjval(m), atol=1e-4)
+for i in 1:3
+    @test isapprox(JuMP.getvalue(x[i]), scalar_solution[i], atol=1e-4)
+end
+for i in 1:3, j in 1:3
+    @test isapprox(JuMP.getvalue(X[i,j]), psdvar_solution[1][i,j], atol=1e-4)
+end
+
+
+dat = readcbfdata("example3.cbf")
+c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset = cbftompb(dat)
+
+@test dat.sense == :Min
+@test dat.objoffset == 1.0
+@test all(vartypes .== :Cont)
+
+m = MathProgBase.ConicModel(SCSSOLVER)
+MathProgBase.loadproblem!(m, c, A, b, con_cones, var_cones)
+MathProgBase.optimize!(m)
+@test MathProgBase.status(m) == :Optimal
+
+scalar_solution, psdvar_solution = ConicBenchmarkUtilities.mpb_sol_to_cbf(dat,MathProgBase.getsolution(m))
+
+jm = JuMP.Model(solver=SCSSOLVER)
+@JuMP.variable(jm, x[1:2])
+@JuMP.variable(jm, X[1:2,1:2], SDP)
+
+
+@JuMP.objective(jm, Min, X[1,1] + X[2,2] + x[1] + x[2] + 1)
+@JuMP.constraint(jm, X[1,2] + X[2,1] - x[1] - x[2] ≥ 0.0)
+@JuMP.SDconstraint(jm, [0 1; 1 3]*x[1] + [3 1; 1 0]*x[2] - [1 0; 0 1] >= 0)
+
+
+@test JuMP.solve(jm) == :Optimal
+@test isapprox(JuMP.getobjectivevalue(jm), MathProgBase.getobjval(m)+dat.objoffset, atol=1e-4)
+for i in 1:2
+    @test isapprox(JuMP.getvalue(x[i]), scalar_solution[i], atol=1e-4)
+end
+for i in 1:2, j in 1:2
+    @test isapprox(JuMP.getvalue(X[i,j]), psdvar_solution[1][i,j], atol=1e-4)
+end
