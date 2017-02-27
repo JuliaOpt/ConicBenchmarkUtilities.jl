@@ -21,6 +21,10 @@ solver = ECOSSolver()
 # Now load and solve
 m = MathProgBase.ConicModel(ECOSSolver(verbose=0))
 MathProgBase.loadproblem!(m, c, A, b, con_cones, var_cones)
+# Continuous solvers need not implement setvartype!
+if !all(vartypes .== :Cont)
+    MathProgBase.setvartype!(m, vartypes)
+end
 MathProgBase.optimize!(m)
 # Solution accessible through:
 x_sol = MathProgBase.getsolution(m)
