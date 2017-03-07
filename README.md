@@ -40,6 +40,16 @@ newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
 writecbfdata("example.cbf",newdat,"# Comment for the CBF header")
 ```
 
+## How to write a JuMP model to CBF form:
+
+```jl
+m = JuMP.Model()
+@variable(m, x[1:2])
+@variable(m, t)
+@constraint(m, norm(x) <= t)
+ConicBenchmarkUtilities.jump_to_cbf(m, "soctest", "soctest.cbf")
+```
+
 ## How to write a Convex.jl model to CBF form:
 
 ```jl

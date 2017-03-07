@@ -10,5 +10,6 @@ include("cbf_output.jl")
 include("mpb.jl")
 include("preprocess_mpb.jl")
 include("convex_to_cbf.jl")
+include("jump_to_cbf.jl")
 
 end # module
