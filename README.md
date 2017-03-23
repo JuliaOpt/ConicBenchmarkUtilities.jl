@@ -36,9 +36,11 @@ scalar_solution, psdvar_solution = ConicBenchmarkUtilities.mpb_sol_to_cbf(dat,x_
 ## How to write a CBF instance:
 
 ```jl
-newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
+newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, sense)
 writecbfdata("example.cbf",newdat,"# Comment for the CBF header")
 ```
+
+Note that because MathProgBase conic format is more general than CBF in specifying the mapping between variables and cones, *the order of the variables in the CBF file may not match the original order*. No reordering takes place if ``var_cones`` is trivial, i.e., ``[(:Free,1:N)]`` where ``N`` is the total number of variables.
 
 ## How to write a JuMP model to CBF form:
 
