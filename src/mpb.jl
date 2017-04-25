@@ -270,16 +270,16 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
     for i in 1:length(c)
         if c[i] != 0.0 && psdvar_idx_old_to_new[i] != (0,0,0)
             varidx, vari, varj = psdvar_idx_old_to_new[i]
-            scale = (vari == varj) ? 1.0 : 1/sqrt(2)
-            push!(objfcoord, (varidx, vari, varj, scale*c[i]))
+            scale = (vari == varj) ? 1.0 : sqrt(2)
+            push!(objfcoord, (varidx, vari, varj, c[i]/scale))
         end
     end
     dcoord = Vector{Tuple{Int,Int,Int,Float64}}(0)
     for i in 1:length(b)
         if b[i] != 0.0 && psdcon_idx_old_to_new[i] != (0,0,0)
             conidx, coni, conj = psdcon_idx_old_to_new[i]
-            scale = (coni == conj) ? 1.0 : 1/sqrt(2)
-            push!(dcoord, (conidx, coni, conj, scale*b[i]))
+            scale = (coni == conj) ? 1.0 : sqrt(2)
+            push!(dcoord, (conidx, coni, conj, b[i]/scale))
         end
     end
 
@@ -295,13 +295,13 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
             newrow = con_idx_old_to_new[i]
             @assert newrow != 0
             varidx, vari, varj = psdvar_idx_old_to_new[j]
-            scale = (vari == varj) ? 1.0 : 1/sqrt(2)
-            push!(fcoord, (newrow, varidx, vari, varj, -scale*v))
+            scale = (vari == varj) ? 1.0 : sqrt(2)
+            push!(fcoord, (newrow, varidx, vari, varj, -v/scale))
         elseif psdcon_idx_old_to_new[i] != (0,0,0)
             newcol = var_idx_old_to_new[j]
             conidx, coni, conj = psdcon_idx_old_to_new[i]
-            scale = (coni == conj) ? 1.0 : 1/sqrt(2)
-            push!(hcoord, (conidx, newcol, coni, conj, -scale*v))
+            scale = (coni == conj) ? 1.0 : sqrt(2)
+            push!(hcoord, (conidx, newcol, coni, conj, -v/scale))
         end
     end
 
