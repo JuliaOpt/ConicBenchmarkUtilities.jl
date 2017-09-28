@@ -1,5 +1,4 @@
 
-
 function writecbfdata(filename,dat::CBFData, comments="")
     if endswith(filename,"cbf.gz")
         fd = gzopen(filename,"w")
@@ -129,5 +128,4 @@ function writecbfdata(filename,dat::CBFData, comments="")
     end
 
     close(fd)
-
 end

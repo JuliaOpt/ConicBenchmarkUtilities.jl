@@ -30,9 +30,7 @@ function parse_matblock(fd,outputmat,num_indices)
     end
 end
 
-
 function readcbfdata(filename)
-
     if endswith(filename,"cbf.gz")
         fd = gzopen(filename,"r")
     else
@@ -47,12 +45,12 @@ function readcbfdata(filename)
         line = readline(fd)
         startswith(line,"#") && continue # comments
         length(line) == 1 && continue # blank lines
-        
+
         # new block
-        
+
         if startswith(line,"VER")
             nextline = readline(fd)
-            @assert startswith(nextline,"1") || startswith(nextline,"2") 
+            @assert startswith(nextline,"1") || startswith(nextline,"2")
             continue
         end
 
@@ -172,11 +170,7 @@ function readcbfdata(filename)
         if startswith(line,"DCOORD")
             parse_matblock(fd,dat.dcoord,3)
         end
-
-
     end
 
     return dat
 end
-
-

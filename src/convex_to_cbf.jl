@@ -1,5 +1,4 @@
 
-
 function convex_to_cbf(problem, name, filename)
     # work-around for optional dependency on Convex
     c, A, b, cones, var_to_ranges, vartypes, conic_constraints = eval(Main,:(Convex.conic_problem($problem)))
