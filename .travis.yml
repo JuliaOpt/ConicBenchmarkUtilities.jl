@@ -4,9 +4,8 @@ os:
   - linux
 #  - osx # disabled until queues are reasonable
 julia:
-  - 0.5
   - 0.6
-  - nightly
+#  - nightly
 notifications:
   email: false
 # uncomment the following lines to override the default test script
