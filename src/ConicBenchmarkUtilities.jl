@@ -5,7 +5,7 @@ module ConicBenchmarkUtilities
 using GZip
 
 export readcbfdata, cbftompb, mpbtocbf, writecbfdata
-export remove_zero_varcones, socrotated_to_soc, remove_ints_in_nonlinear_cones
+export remove_zero_varcones, socrotated_to_soc, remove_ints_in_nonlinear_cones, dualize
 
 include("cbf_input.jl")
 include("cbf_output.jl")

@@ -2,17 +2,15 @@
 const conemap = Dict("L=" => :Zero, "F" => :Free,
                      "L-" => :NonPos, "L+" => :NonNeg,
                      "Q" => :SOC, "QR" => :SOCRotated,
-                     "EXP" => :ExpPrimal)
-                     #"EXP*" => :ExpDual)
+                     "EXP" => :ExpPrimal, "EXP*" => :ExpDual)
 const conemap_rev = Dict(:Zero => "L=", :Free => "F",
                      :NonPos => "L-", :NonNeg => "L+",
                      :SOC => "Q", :SOCRotated => "QR",
-                     :ExpPrimal => "EXP")
-                     #, :ExpDual => "EXP*")
+                     :ExpPrimal => "EXP", :ExpDual => "EXP*")
 
 function cbfcones_to_mpbcones(c::Vector{Tuple{String,Int}},total)
     i = 1
-    mpb_cones = Vector{Tuple{Symbol,Vector{Int}}}(0) 
+    mpb_cones = Vector{Tuple{Symbol,Vector{Int}}}(0)
 
     for (cname,count) in c
         conesymbol = conemap[cname]
@@ -38,7 +36,7 @@ function unzip{T<:Tuple}(A::Array{T})
             push!(res[i], t[i])
         end
     end
-    res
+    return res
 end
 
 psd_len(n) = div(n*(n+1),2)
@@ -55,7 +53,6 @@ function idx_to_offset(n,i,j)
 end
 
 function cbftompb(dat::CBFData)
-
     @assert dat.nvar == sum(c->c[2],dat.var)
     @assert dat.nconstr == sum(c->c[2],dat.con)
 
@@ -64,9 +61,9 @@ function cbftompb(dat::CBFData)
         c[i] = v
     end
 
-    var_cones = cbfcones_to_mpbcones(dat.var, dat.nvar) 
+    var_cones = cbfcones_to_mpbcones(dat.var, dat.nvar)
     con_cones = cbfcones_to_mpbcones(dat.con, dat.nconstr)
-    
+
     I_A, J_A, V_A = unzip(dat.acoord)
     b = zeros(dat.nconstr)
     for (i,v) in dat.bcoord
@@ -129,17 +126,13 @@ function cbftompb(dat::CBFData)
 
     A = sparse(I_A,J_A,-V_A,nconstr,nvar)
 
-
     vartypes = fill(:Cont, nvar)
     vartypes[dat.intlist] = :Int
 
-
     return c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset
-
 end
 
 function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
-
     num_scalar_var = 0
     for (cone,idx) in var_cones
         if cone != :SDP
@@ -229,7 +222,6 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
         end
     end
 
-
     psdvar = Int[]
     psdcon = Int[]
 
@@ -306,14 +298,11 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
     end
 
     return CBFData(name,sense,var,psdvar,con,psdcon,objacoord,objfcoord,0.0,fcoord,acoord,bcoord,hcoord,dcoord,intlist,num_scalar_var,num_scalar_con)
-
-
 end
 
 # converts an MPB solution to CBF solution
 # no transformation needed unless PSD vars present
 function mpb_sol_to_cbf(dat::CBFData,x::Vector)
-
     scalar_solution = x[1:dat.nvar]
 
     psdvar_solutions = Vector{Matrix{Float64}}(0)

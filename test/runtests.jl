@@ -9,9 +9,9 @@ dat = readcbfdata("example4.cbf")
 
 c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset = cbftompb(dat)
 
-@test_approx_eq c [1.0, 0.64]
-@test_approx_eq A [-50.0 -31; -3.0 2.0]
-@test_approx_eq b [-250.0, 4.0]
+@test c ≈ [1.0, 0.64]
+@test A ≈ [-50.0 -31; -3.0 2.0]
+@test b ≈ [-250.0, 4.0]
 @test vartypes == [:Cont, :Cont]
 @test dat.sense == :Max
 @test dat.objoffset == 0.0
@@ -28,8 +28,8 @@ x = Convex.Variable(2)
 pj = Convex.maximize(x[1] + 0.64x[2], 50x[1] + 31x[2] <= 250, 3x[1] - 2x[2] >= -4)
 Convex.solve!(pj, ECOSSolver(verbose=0))
 
-@test_approx_eq_eps x_sol Convex.evaluate(x) 1e-6
-@test_approx_eq_eps -objval pj.optval 1e-6
+@test x_sol ≈ Convex.evaluate(x) atol=1e-6
+@test -objval ≈ pj.optval atol=1e-6
 
 # test CBF writer
 newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
@@ -39,6 +39,29 @@ rm("example_out.cbf")
 
 # test transformation utilities
 
+# max  y + z
+# st   x <= 1
+#     (x,y,z) in SOC
+#      x in {0,1}
+c = [0.0, -1.0, -1.0]
+A = [1.0  0.0  0.0;
+    -1.0  0.0  0.0;
+     0.0 -1.0  0.0;
+     0.0  0.0 -1.0]
+b = [1.0, 0.0, 0.0, 0.0]
+con_cones = [(:NonNeg,1:1), (:SOC,2:4)]
+var_cones = [(:Free,1:3)]
+
+(c, A, b, con_cones, var_cones) = dualize(c, A, b, con_cones, var_cones)
+
+@test c == [1.0, 0.0, 0.0, 0.0]
+@test A == [-1.0  1.0  0.0  0.0;
+             0.0  0.0  1.0  0.0;
+             0.0  0.0  0.0  1.0]
+@test b == [0.0, -1.0, -1.0]
+@test con_cones == [(:Zero,1:3)]
+@test var_cones == [(:NonNeg,1:1), (:SOC,2:4)]
+
 # SOCRotated1 from MathProgBase conic tests
 c = [ 0.0, 0.0, -1.0, -1.0]
 A = [ 1.0  0.0   0.0   0.0
@@ -47,11 +70,12 @@ b = [ 0.5, 1.0]
 con_cones = [(:Zero,1:2)]
 var_cones = [(:SOCRotated,1:4)]
 vartypes = fill(:Cont,4)
-c, A, b, con_cones, var_cones, vartypes = socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
+
+(c, A, b, con_cones, var_cones, vartypes) = socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
 
 @test c == [0.0,0.0,-1.0,-1.0]
 @test b == [0.5,1.0,0.0,0.0,0.0,0.0]
-@test_approx_eq A [1.0 0.0 0.0 0.0
+@test A ≈ [1.0 0.0 0.0 0.0
                    0.0 1.0 0.0 0.0
                   -1.0 -1.0 0.0 0.0
                   -1.0 1.0 0.0 0.0
@@ -66,7 +90,8 @@ b = [0.5, 1.0, 0.0, 0.0]
 con_cones = [(:SOCRotated,1:4)]
 var_cones = [(:Free,1:2)]
 vartypes = fill(:Cont,2)
-c, A, b, con_cones, var_cones, vartypes = socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
+
+(c, A, b, con_cones, var_cones, vartypes) = socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
 
 @test c == [-1.0,-1.0,0.0,0.0,0.0,0.0]
 @test b == [0.5,1.0,0.0,0.0,0.0,0.0,0.0,0.0]
@@ -89,7 +114,8 @@ con_cones = [(:Zero,1)]
 var_cones = [(:SOC,1:3)]
 vartypes = [:Cont,:Bin,:Bin]
 
-c, A, b, con_cones, var_cones, vartypes = remove_ints_in_nonlinear_cones(c, A, b, con_cones, var_cones, vartypes)
+(c, A, b, con_cones, var_cones, vartypes) = remove_ints_in_nonlinear_cones(c, A, b, con_cones, var_cones, vartypes)
+
 @test c == [0.0,-2.0,-1.0,0.0,0.0]
 @test b == [1.0,0.0,0.0]
 @test A == [1.0 0.0 0.0 0.0 0.0
@@ -97,8 +123,6 @@ c, A, b, con_cones, var_cones, vartypes = remove_ints_in_nonlinear_cones(c, A, b
  0.0 0.0 1.0 0.0 -1.0]
 @test var_cones == [(:SOC,[1,4,5]),(:Free,[2,3])]
 @test con_cones == [(:Zero,[1]),(:Zero,[2,3])]
-
-
 
 x = Convex.Variable()
 problem = Convex.minimize( exp(x), x >= 1 )
@@ -143,7 +167,7 @@ BCOORD
 
 @test readstring("exptest.cbf") == output
 
-c, A, b, con_cones, var_cones, vartypes, sense, objoffset = cbftompb(readcbfdata("exptest.cbf"))
+(c, A, b, con_cones, var_cones, vartypes, sense, objoffset) = cbftompb(readcbfdata("exptest.cbf"))
 
 @test sense == :Min
 @test objoffset == 0.0
@@ -153,20 +177,19 @@ MathProgBase.loadproblem!(m, c, A, b, con_cones, var_cones)
 MathProgBase.optimize!(m)
 @test MathProgBase.status(m) == :Optimal
 x_sol = MathProgBase.getsolution(m)
-@test_approx_eq_eps x_sol [1.0,exp(1),exp(1)] 1e-5
-@test_approx_eq_eps MathProgBase.getobjval(m) exp(1) 1e-5
+@test x_sol ≈ [1.0,exp(1),exp(1)] atol=1e-5
+@test MathProgBase.getobjval(m) ≈ exp(1) atol=1e-5
 
 rm("exptest.cbf")
 
-
 # SDP tests
-SCSSOLVER = SCSSolver(eps=1e-6,verbose=0)
+SCSSOLVER = SCSSolver(eps=1e-6, verbose=0)
 
 dat = readcbfdata("example1.cbf")
 writecbfdata("example_out.cbf",dat,"# Example C.1 from the CBF documentation version 2")
 @test strip(readstring("example1.cbf")) == strip(readstring("example_out.cbf"))
 rm("example_out.cbf")
-c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset = cbftompb(dat)
+(c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset) = cbftompb(dat)
 
 newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
 writecbfdata("example_out.cbf",newdat,"# Example C.1 from the CBF documentation version 2")
@@ -242,29 +265,27 @@ MathProgBase.loadproblem!(m, c, A, b, con_cones, var_cones)
 MathProgBase.optimize!(m)
 @test MathProgBase.status(m) == :Optimal
 
-scalar_solution, psdvar_solution = ConicBenchmarkUtilities.mpb_sol_to_cbf(dat,MathProgBase.getsolution(m))
+(scalar_solution, psdvar_solution) = ConicBenchmarkUtilities.mpb_sol_to_cbf(dat,MathProgBase.getsolution(m))
 
 jm = JuMP.Model(solver=SCSSOLVER)
 @JuMP.variable(jm, x[1:3])
 @JuMP.variable(jm, X[1:3,1:3], SDP)
-
 
 @JuMP.objective(jm, Min, vecdot([2 1 0; 1 2 1; 0 1 2],X) + x[2])
 @JuMP.constraint(jm, X[1,1]+X[2,2]+X[3,3]+x[2] == 1.0)
 @JuMP.constraint(jm, vecdot(ones(3,3),X) + x[1] + x[3] == 0.5)
 @JuMP.constraint(jm, norm([x[1],x[3]]) <= x[2])
 @test JuMP.solve(jm) == :Optimal
-@test isapprox(JuMP.getobjectivevalue(jm), MathProgBase.getobjval(m), atol=1e-4)
+@test JuMP.getobjectivevalue(jm) ≈ MathProgBase.getobjval(m) atol=1e-4
 for i in 1:3
-    @test isapprox(JuMP.getvalue(x[i]), scalar_solution[i], atol=1e-4)
+    @test JuMP.getvalue(x[i]) ≈ scalar_solution[i] atol=1e-4
 end
 for i in 1:3, j in 1:3
-    @test isapprox(JuMP.getvalue(X[i,j]), psdvar_solution[1][i,j], atol=1e-4)
+    @test JuMP.getvalue(X[i,j]) ≈ psdvar_solution[1][i,j] atol=1e-4
 end
 
-
 dat = readcbfdata("example3.cbf")
-c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset = cbftompb(dat)
+(c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset) = cbftompb(dat)
 
 @test dat.sense == :Min
 @test dat.objoffset == 1.0
@@ -281,19 +302,17 @@ jm = JuMP.Model(solver=SCSSOLVER)
 @JuMP.variable(jm, x[1:2])
 @JuMP.variable(jm, X[1:2,1:2], SDP)
 
-
 @JuMP.objective(jm, Min, X[1,1] + X[2,2] + x[1] + x[2] + 1)
 @JuMP.constraint(jm, X[1,2] + X[2,1] - x[1] - x[2] ≥ 0.0)
 @JuMP.SDconstraint(jm, [0 1; 1 3]*x[1] + [3 1; 1 0]*x[2] - [1 0; 0 1] >= 0)
 
-
 @test JuMP.solve(jm) == :Optimal
-@test isapprox(JuMP.getobjectivevalue(jm), MathProgBase.getobjval(m)+dat.objoffset, atol=1e-4)
+@test JuMP.getobjectivevalue(jm) ≈ MathProgBase.getobjval(m)+dat.objoffset atol=1e-4
 for i in 1:2
-    @test isapprox(JuMP.getvalue(x[i]), scalar_solution[i], atol=1e-4)
+    @test JuMP.getvalue(x[i]) ≈ scalar_solution[i] atol=1e-4
 end
 for i in 1:2, j in 1:2
-    @test isapprox(JuMP.getvalue(X[i,j]), psdvar_solution[1][i,j], atol=1e-4)
+    @test JuMP.getvalue(X[i,j]) ≈ psdvar_solution[1][i,j] atol=1e-4
 end
 
 # should match example3 modulo irrelevant changes

@@ -7,7 +7,7 @@
 function remove_zero_varcones(c, A, b, con_cones, var_cones, vartypes)
     old_to_new_idx = zeros(Int,length(c))
     last_idx = 1
-    new_varcones = Vector{Tuple{Symbol,Vector{Int}}}(0) 
+    new_varcones = Vector{Tuple{Symbol,Vector{Int}}}(0)
     for (cname, cidx) in var_cones
         if cname != :Zero
             for i in cidx
@@ -82,7 +82,6 @@ end
 
 # Translate all SOCRotated cones to SOCs
 function socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
-
     con_cones = copy(con_cones)
     var_cones = copy(var_cones)
     vartypes = copy(vartypes)
@@ -124,14 +123,14 @@ function socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
             push!(I, rowidx)
             push!(J, cidx[2])
             push!(V, -1.0)
-            
+
             push!(I, rowidx+1)
             push!(J, cidx[1])
             push!(V, -1.0)
             push!(I, rowidx+1)
             push!(J, cidx[2])
             push!(V, 1.0)
-            
+
             append!(I, (rowidx+2):(rowidx+length(cidx)-1))
             append!(J, cidx[3:end])
             append!(V, fill(-sqrt(2), length(cidx)-2))
@@ -146,4 +145,34 @@ function socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
     return c, A, b, con_cones, var_cones, vartypes
 end
 
+# Dualize the conic (continuous relaxation) problem
+function dualize(c, A, b, con_cones, var_cones)
+    # Strong duality must hold between the primal and dual
+    # NOTE: objective sign reversed; may return incorrect status (eg if both infeasible)
+    #
+    # Primal:
+    # min_x   c^Tx
+    # s.t.    b - Ax   \in K_1
+    #         x        \in K_2
+    #
+    # Dual:
+    # -min_y  b^Ty
+    # s.t.    c + A^Ty \in K_2^*
+    #         y        \in K_1^*
 
+    const conedual = Dict{Symbol,Symbol}(
+        :Zero => :Free,
+        :Free => :Zero,
+        :NonNeg => :NonNeg,
+        :NonPos => :NonPos,
+        :ExpPrimal => :ExpDual,
+        :ExpDual => :ExpPrimal,
+        :SDP => :SDP,
+        :SOC => :SOC,
+        :SOCRotated => :SOCRotated
+    )
+
+    givedual = (coneinds -> (conedual[coneinds[1]], coneinds[2]))
+
+    return (b, -A', c, map(givedual, var_cones), map(givedual, con_cones))
+end
