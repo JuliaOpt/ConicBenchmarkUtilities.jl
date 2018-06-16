@@ -2,4 +2,4 @@ MathProgBase
 ECOS
 SCS
 Convex
-JuMP
+JuMP 0.18 0.19
