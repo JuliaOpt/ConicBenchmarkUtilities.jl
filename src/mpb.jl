@@ -53,8 +53,8 @@ function idx_to_offset(n,i,j)
 end
 
 function cbftompb(dat::CBFData)
-    @assert dat.nvar == sum(c->c[2],dat.var)
-    @assert dat.nconstr == sum(c->c[2],dat.con)
+    @assert dat.nvar == (isempty(dat.var) ? 0 : sum(c->c[2],dat.var))
+    @assert dat.nconstr == (isempty(dat.con) ? 0 : sum(c->c[2],dat.con))
 
     c = zeros(dat.nvar)
     for (i,v) in dat.objacoord

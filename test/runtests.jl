@@ -275,6 +275,12 @@ end
     rm("example_out.cbf")
 end
 
+@testset "Instance with only PSD variables" begin
+    dat = readcbfdata("psd_var_only.cbf")
+    (c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset) = cbftompb(dat)
+    @test var_cones == [(:SDP, [1, 2, 3])]
+end
+
 SCSSOLVER = SCSSolver(eps=1e-6, verbose=0)
 
 @testset "roundtrip through MPB solver" begin
