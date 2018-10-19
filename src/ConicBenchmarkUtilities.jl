@@ -7,14 +7,16 @@ using GZip
 if VERSION < v"0.7.0-"
     import Compat: undef
     import Compat: @warn
-    import Compat: findall
 end
 
 if VERSION > v"0.7.0-"
     using SparseArrays
     using LinearAlgebra
-    #import SparseArrays: sparse
-    #import LinearAlgebra: vecdot
+    # this is required because findall return type changed in v0.7
+    function SparseArrays.findnz(A::AbstractMatrix)
+        I = findall(!iszero, A)
+        return (getindex.(I, 1), getindex.(I, 2), A[I])
+    end
 end
 
 export readcbfdata, cbftompb, mpbtocbf, writecbfdata

@@ -87,10 +87,7 @@ function socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
     vartypes = copy(vartypes)
     c = copy(c)
     b = copy(b)
-    I, J, V = begin # julia v0.6/v1.0 version of findnz(A)
-        I = findall(!iszero, A)
-        ([item[1] for item in I], [item[2] for item in I], A[I])
-    end
+    I, J, V = findnz(A)
     nslack = 0
     # introduce slack variables and put them into SOCRotated cones
     for i in 1:length(con_cones)
