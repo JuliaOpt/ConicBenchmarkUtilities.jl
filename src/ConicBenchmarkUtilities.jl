@@ -5,8 +5,9 @@ module ConicBenchmarkUtilities
 using GZip
 
 if VERSION < v"0.7.0-"
-    import Compat: Array
+    #import Compat: Array
     import Compat: undef
+    import Compat: @warn
 end
 
 if VERSION > v"0.7.0-"

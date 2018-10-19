@@ -4,6 +4,7 @@ using ConicBenchmarkUtilities
 
 if VERSION < v"0.7.0-"
     using Base.Test
+    import Compat: det
 end
 
 if VERSION > v"0.7.0-"
@@ -48,7 +49,7 @@ end
     # test CBF writer
     newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
     writecbfdata("example_out.cbf",newdat,"# Example C.4 from the CBF documentation version 2")
-    @test strip(readstring("example4.cbf")) == strip(readstring("example_out.cbf"))
+    @test strip(read("example4.cbf", String)) == strip(read("example_out.cbf", String))
     rm("example_out.cbf")
 
 end
@@ -191,7 +192,7 @@ end
 
     """
 
-    @test readstring("exptest.cbf") == output
+    @test read("exptest.cbf", String) == output
 
     (c, A, b, con_cones, var_cones, vartypes, sense, objoffset) = cbftompb(readcbfdata("exptest.cbf"))
 
@@ -218,7 +219,7 @@ end
     @test dat.objoffset == 0.0
     @test isempty(dat.intlist)
     writecbfdata("example_out.cbf",dat,"# Example C.1 from the CBF documentation version 2")
-    @test strip(readstring("example1.cbf")) == strip(readstring("example_out.cbf"))
+    @test strip(read("example1.cbf", String)) == strip(read("example_out.cbf", String))
     rm("example_out.cbf")
 end
 
@@ -287,7 +288,7 @@ end
     1 -0.5
 
     """
-    @test readstring("example_out.cbf") == output
+    @test read("example_out.cbf", String) == output
     rm("example_out.cbf")
 end
 
@@ -313,9 +314,9 @@ SCSSOLVER = SCSSolver(eps=1e-6, verbose=0)
     @JuMP.variable(jm, x[1:3])
     @JuMP.variable(jm, X[1:3,1:3], SDP)
 
-    @JuMP.objective(jm, Min, vecdot([2 1 0; 1 2 1; 0 1 2],X) + x[2])
+    @JuMP.objective(jm, Min, dot([2 1 0; 1 2 1; 0 1 2],X) + x[2])
     @JuMP.constraint(jm, X[1,1]+X[2,2]+X[3,3]+x[2] == 1.0)
-    @JuMP.constraint(jm, vecdot(ones(3,3),X) + x[1] + x[3] == 0.5)
+    @JuMP.constraint(jm, dot(ones(3,3),X) + x[1] + x[3] == 0.5)
     @JuMP.constraint(jm, norm([x[1],x[3]]) <= x[2])
     @test JuMP.solve(jm) == :Optimal
     @test JuMP.getobjectivevalue(jm) ≈ MathProgBase.getobjval(m) atol=1e-4
@@ -419,7 +420,7 @@ end
 
     """
 
-    @test readstring("sdptest.cbf") == output
+    @test read("sdptest.cbf", String) == output
     rm("sdptest.cbf")
 end
 

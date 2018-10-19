@@ -10,7 +10,7 @@ const conemap_rev = Dict(:Zero => "L=", :Free => "F",
 
 function cbfcones_to_mpbcones(c::Vector{Tuple{String,Int}},total)
     i = 1
-    mpb_cones = Vector{Tuple{Symbol,Vector{Int}}}(0)
+    mpb_cones = Vector{Tuple{Symbol,Vector{Int}}}()
 
     for (cname,count) in c
         conesymbol = conemap[cname]
@@ -28,7 +28,7 @@ function cbfcones_to_mpbcones(c::Vector{Tuple{String,Int}},total)
 end
 
 # https://github.com/JuliaLang/julia/issues/13942#issuecomment-217324812
-function unzip{T<:Tuple}(A::Array{T})
+function unzip(A::Array{T}) where T <: Tuple
     res = map(x -> x[], T.parameters)
     res_len = length(res)
     for t in A
@@ -127,7 +127,7 @@ function cbftompb(dat::CBFData)
     A = sparse(I_A,J_A,-V_A,nconstr,nvar)
 
     vartypes = fill(:Cont, nvar)
-    vartypes[dat.intlist] = :Int
+    vartypes[dat.intlist] .= :Int
 
     return c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset
 end
@@ -153,8 +153,8 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
     con_idx_new_to_old = zeros(Int,num_scalar_con)
 
     # CBF fields
-    var = Vector{Tuple{String,Int}}(0)
-    con = Vector{Tuple{String,Int}}(0)
+    var = Vector{Tuple{String,Int}}()
+    con = Vector{Tuple{String,Int}}()
 
     i = 1
     for (cone,idx) in var_cones
@@ -258,7 +258,7 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
         end
     end
 
-    objfcoord = Vector{Tuple{Int,Int,Int,Float64}}(0)
+    objfcoord = Vector{Tuple{Int,Int,Int,Float64}}()
     for i in 1:length(c)
         if c[i] != 0.0 && psdvar_idx_old_to_new[i] != (0,0,0)
             varidx, vari, varj = psdvar_idx_old_to_new[i]
@@ -266,7 +266,7 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
             push!(objfcoord, (varidx, vari, varj, c[i]/scale))
         end
     end
-    dcoord = Vector{Tuple{Int,Int,Int,Float64}}(0)
+    dcoord = Vector{Tuple{Int,Int,Int,Float64}}()
     for i in 1:length(b)
         if b[i] != 0.0 && psdcon_idx_old_to_new[i] != (0,0,0)
             conidx, coni, conj = psdcon_idx_old_to_new[i]
@@ -276,8 +276,8 @@ function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
     end
 
     A_I, A_J, A_V = findnz(A)
-    fcoord = Vector{Tuple{Int,Int,Int,Int,Float64}}(0)
-    hcoord = Vector{Tuple{Int,Int,Int,Int,Float64}}(0)
+    fcoord = Vector{Tuple{Int,Int,Int,Int,Float64}}()
+    hcoord = Vector{Tuple{Int,Int,Int,Int,Float64}}()
 
     for (i,j,v) in zip(A_I,A_J,A_V)
         if psdvar_idx_old_to_new[j] != (0,0,0)
@@ -305,12 +305,12 @@ end
 function mpb_sol_to_cbf(dat::CBFData,x::Vector)
     scalar_solution = x[1:dat.nvar]
 
-    psdvar_solutions = Vector{Matrix{Float64}}(0)
+    psdvar_solutions = Vector{Matrix{Float64}}()
     startidx = dat.nvar+1
     for i in 1:length(dat.psdvar)
         endidx = startidx + psd_len(dat.psdvar[i]) - 1
         svec_solution = x[startidx:endidx]
-        push!(psdvar_solutions, make_smat!(Matrix{Float64}(dat.psdvar[i],dat.psdvar[i]), svec_solution))
+        push!(psdvar_solutions, make_smat!(Matrix{Float64}(undef,dat.psdvar[i],dat.psdvar[i]), svec_solution))
         startidx = endidx + 1
     end
 
