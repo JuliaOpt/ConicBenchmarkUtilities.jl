@@ -1,6 +1,6 @@
 using Base.Test
 using ECOS, SCS, MathProgBase
-import Convex
+#import Convex
 import JuMP
 using ConicBenchmarkUtilities
 
@@ -25,12 +25,15 @@ using ConicBenchmarkUtilities
     x_sol = MathProgBase.getsolution(m)
     objval = MathProgBase.getobjval(m)
 
+    #=
+    # drop Convex.jl
     x = Convex.Variable(2)
     pj = Convex.maximize(x[1] + 0.64x[2], 50x[1] + 31x[2] <= 250, 3x[1] - 2x[2] >= -4)
     Convex.solve!(pj, ECOSSolver(verbose=0))
 
     @test x_sol ≈ Convex.evaluate(x) atol=1e-6
     @test -objval ≈ pj.optval atol=1e-6
+    =#
 
     # test CBF writer
     newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
@@ -134,6 +137,8 @@ end
     @test con_cones == [(:Zero,[1]),(:Zero,[2,3])]
 end
 
+#=
+# drop Convex.jl
 @testset "exponential cones with Convex.jl" begin
     x = Convex.Variable()
     problem = Convex.minimize( exp(x), x >= 1 )
@@ -193,6 +198,7 @@ end
 
     rm("exptest.cbf")
 end
+=#
 
 # SDP tests
 
