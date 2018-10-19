@@ -1,8 +1,18 @@
-using Base.Test
 using ECOS, SCS, MathProgBase
-#import Convex
 import JuMP
 using ConicBenchmarkUtilities
+
+if VERSION < v"0.7.0-"
+    using Base.Test
+end
+
+if VERSION > v"0.7.0-"
+    using Test
+    using SparseArrays
+    using LinearAlgebra
+end
+
+@testset "ConicBenchmarkUtilities Tests" begin
 
 @testset "example4.cbf" begin
 
@@ -411,4 +421,6 @@ end
 
     @test readstring("sdptest.cbf") == output
     rm("sdptest.cbf")
+end
+
 end
