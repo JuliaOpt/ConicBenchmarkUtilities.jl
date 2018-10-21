@@ -1,4 +1,4 @@
-type CBFData
+mutable struct CBFData
     name::String
     sense::Symbol
     var::Vector{Tuple{String,Int}}
@@ -143,8 +143,8 @@ function readcbfdata(filename)
 
         if startswith(line,"OBJBCOORD")
             nextline = readline(fd)
-            dat.objoffset = float(strip(nextline))
-            warn("Instance has objective offset")
+            dat.objoffset = parse(Float64, strip(nextline))
+            @warn "Instance has objective offset"
         end
 
         if startswith(line,"BCOORD")

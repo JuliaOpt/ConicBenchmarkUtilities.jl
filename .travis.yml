@@ -1,12 +1,11 @@
-# Documentation: http://docs.travis-ci.com/user/languages/julia/
 language: julia
 os:
   - linux
-#  - osx # disabled until queues are reasonable
+  - osx
 julia:
   - 0.6
   - 0.7
-#  - nightly
+  - 1.0
 notifications:
   email: false
 # uncomment the following lines to override the default test script

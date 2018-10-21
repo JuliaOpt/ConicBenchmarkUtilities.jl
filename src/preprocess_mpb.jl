@@ -7,7 +7,7 @@
 function remove_zero_varcones(c, A, b, con_cones, var_cones, vartypes)
     old_to_new_idx = zeros(Int,length(c))
     last_idx = 1
-    new_varcones = Vector{Tuple{Symbol,Vector{Int}}}(0)
+    new_varcones = Vector{Tuple{Symbol,Vector{Int}}}()
     for (cname, cidx) in var_cones
         if cname != :Zero
             for i in cidx
@@ -32,7 +32,7 @@ end
 function remove_ints_in_nonlinear_cones(c, A, b, con_cones, var_cones, vartypes)
     c = copy(c)
     b = copy(b)
-    new_var_cones = Vector{Tuple{Symbol,Vector{Int}}}(0)
+    new_var_cones = Vector{Tuple{Symbol,Vector{Int}}}()
     con_cones = map((a) -> (a[1],vec(collect(a[2]))), con_cones)
     vartypes = copy(vartypes)
 
@@ -145,6 +145,19 @@ function socrotated_to_soc(c, A, b, con_cones, var_cones, vartypes)
     return c, A, b, con_cones, var_cones, vartypes
 end
 
+
+const conedual = Dict{Symbol,Symbol}(
+    :Zero => :Free,
+    :Free => :Zero,
+    :NonNeg => :NonNeg,
+    :NonPos => :NonPos,
+    :ExpPrimal => :ExpDual,
+    :ExpDual => :ExpPrimal,
+    :SDP => :SDP,
+    :SOC => :SOC,
+    :SOCRotated => :SOCRotated
+)
+
 # Dualize the conic (continuous relaxation) problem
 function dualize(c, A, b, con_cones, var_cones)
     # Strong duality must hold between the primal and dual
@@ -159,18 +172,6 @@ function dualize(c, A, b, con_cones, var_cones)
     # -min_y  b^Ty
     # s.t.    c + A^Ty \in K_2^*
     #         y        \in K_1^*
-
-    const conedual = Dict{Symbol,Symbol}(
-        :Zero => :Free,
-        :Free => :Zero,
-        :NonNeg => :NonNeg,
-        :NonPos => :NonPos,
-        :ExpPrimal => :ExpDual,
-        :ExpDual => :ExpPrimal,
-        :SDP => :SDP,
-        :SOC => :SOC,
-        :SOCRotated => :SOCRotated
-    )
 
     givedual = (coneinds -> (conedual[coneinds[1]], coneinds[2]))
 
