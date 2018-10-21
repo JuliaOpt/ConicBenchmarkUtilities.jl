@@ -1,6 +1,7 @@
 # ConicBenchmarkUtilities
 
 [![Build Status](https://travis-ci.org/JuliaOpt/ConicBenchmarkUtilities.jl.svg?branch=master)](https://travis-ci.org/JuliaOpt/ConicBenchmarkUtilities.jl)
+[![codecov](https://codecov.io/gh/JuliaOpt/ConicBenchmarkUtilities.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaOpt/ConicBenchmarkUtilities.jl)
 
 Utitilies to convert between [CBF](http://cblib.zib.de/) and [MathProgBase conic format](http://mathprogbasejl.readthedocs.io/en/latest/conic.html).
 
