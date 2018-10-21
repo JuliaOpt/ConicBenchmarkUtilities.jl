@@ -52,11 +52,3 @@ m = JuMP.Model()
 @constraint(m, norm(x) <= t)
 ConicBenchmarkUtilities.jump_to_cbf(m, "soctest", "soctest.cbf")
 ```
-
-## How to write a Convex.jl model to CBF form:
-
-```jl
-x = Convex.Variable()
-problem = Convex.minimize( exp(x), x >= 1 )
-ConicBenchmarkUtilities.convex_to_cbf(problem, "exptest", "exptest.cbf")
-```
