@@ -12,3 +12,5 @@ notifications:
 #script:
 #  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 #  - julia -e 'Pkg.clone(pwd()); Pkg.build("ConicBenchmarkUtilities"); Pkg.test("ConicBenchmarkUtilities"; coverage=true)'
+after_success:
+  - julia -e '(VERSION >= v"0.7" && using Pkg); Pkg.add("Coverage"); cd(Pkg.dir("ConicBenchmarkUtilities")); using Coverage; Codecov.submit(process_folder())'
