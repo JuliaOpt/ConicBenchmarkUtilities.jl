@@ -1,4 +1,4 @@
-MathProgBase
+MathOptInterface
+JuMP 0.19
 ECOS
 SCS
-JuMP 0.18 0.19
