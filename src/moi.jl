@@ -43,6 +43,21 @@ function cbftomoi_cones(cname, csize::Int)
     end
 end
 
+psd_len(n) = div(n*(n+1), 2)
+
+# returns offset from starting index for (i,j) term in n x n matrix
+function vecoffset(n, i, j)
+    @assert 1 <= i <= n
+    @assert 1 <= j <= n
+    # upper triangle
+    if i > j
+        (i,j) = (j,i)
+    end
+    # row major
+    return psd_len(n) - psd_len(n-i+1) + (j-i)
+end
+
+
 function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     @assert dat.nvar == (isempty(dat.var) ? 0 : sum(c -> c[2], dat.var))
     @assert dat.ncon == (isempty(dat.con) ? 0 : sum(c -> c[2], dat.con))
@@ -72,8 +87,8 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     # variable cones
     k = 0
     for (cname, csize) in dat.var
-        S = cbftomoi_cones(cname, csize)
         F = MOI.VectorOfVariables(x[k+1:k+csize])
+        S = cbftomoi_cones(cname, csize)
         MOI.add_constraint(model, F, S)
         k += csize
     end
@@ -109,19 +124,90 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     # TODO power cones
 
 
-    # TODO PSD cones
 
-    # objfcoord::Vector{Tuple{NTuple{3, Int}, Float64}}
+
+
+
+    # for i in eachindex(dat.psdvar)
+    #     push!(psdvaridxs, psdvaridxs[i-1] + psd_len(dat.psdvar[i]))
+    # end
+
+    # TODO PSD cones
+    npsdvar = 0
+    psdvaridxs = UnitRange[]
+    for i in eachindex(dat.psdvar)
+        ilen = psd_len(dat.psdvar[i])
+        push!(psdvaridxs, npsdvar+1:ilen)
+        npsdvar += ilen
+    end
+    X = MOI.add_variables(model, npsdvar)
+
+    # objective terms
+    objfterms = [MOI.ScalarAffineTerm(v, X[psdvaridxs[a][vecoffset(dat.psdvar[a], b, c)]])) for ((a, b, c), v) in dat.objfcoord]
+
+
     # fcoord::Vector{Tuple{NTuple{4, Int}, Float64}}
     # hcoord::Vector{Tuple{NTuple{4, Int}, Float64}}
     # dcoord::Vector{Tuple{NTuple{3, Int}, Float64}}
 
-    # objective terms
-    objfterms = []
-
     # variable cones
+    for i in eachindex(dat.psdvar)
+        F = MOI.VectorOfVariables(X[psdvaridxs[i]])
+        S = MOI.PositiveSemidefiniteConeSquare(dat.psdvar[i])
+        MOI.add_constraint(model, F, S)
+    end
+
+
+    # push!(var_cones,(:SDP,psdvarstart[i]:psdvarstart[i]+psd_len(dat.psdvar[i])-1))
+
+
+
+
 
     # constraint cones
+    # push!(con_cones,(:SDP,psdconstart[i]:psdconstart[i]+psd_len(dat.psdcon[i])-1))
+
+
+
+
+    c = [c;zeros(nvar-dat.nvar)]
+
+    for (conidx,matidx,i,j,v) in dat.fcoord
+        ix = psdvarstart[matidx] + vecoffset(dat.psdvar[matidx],i,j)
+        push!(I_A,conidx)
+        push!(J_A,ix)
+        scale = (i == j) ? 1.0 : sqrt(2)
+        push!(V_A,scale*v)
+    end
+
+    for (conidx,varidx,i,j,v) in dat.hcoord
+        ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
+        push!(I_A,ix)
+        push!(J_A,varidx)
+        scale = (i == j) ? 1.0 : sqrt(2)
+        push!(V_A,scale*v)
+    end
+
+    b = [b;zeros(ncon-dat.ncon)]
+    for (conidx,i,j,v) in dat.dcoord
+        ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
+        @assert b[ix] == 0.0
+        scale = (i == j) ? 1.0 : sqrt(2)
+        b[ix] = scale*v
+    end
+
+    A = sparse(I_A,J_A,-V_A,ncon,nvar)
+
+
+
+
+
+
+
+
+
+
+
 
 
     # final objective function
@@ -133,13 +219,16 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
 end
 
 
+
+
+
 # TODO moitocbf function
 
 # TODO remove old code
 #
 # function cbftompb(dat::CBFData)
 #     @assert dat.nvar == (isempty(dat.var) ? 0 : sum(c->c[2],dat.var))
-#     @assert dat.nconstr == (isempty(dat.con) ? 0 : sum(c->c[2],dat.con))
+#     @assert dat.ncon == (isempty(dat.con) ? 0 : sum(c->c[2],dat.con))
 #
 #     c = zeros(dat.nvar)
 #     for (i,v) in dat.objacoord
@@ -147,46 +236,46 @@ end
 #     end
 #
 #     var_cones = cbfcones_to_mpbcones(dat.var, dat.nvar)
-#     con_cones = cbfcones_to_mpbcones(dat.con, dat.nconstr)
+#     con_cones = cbfcones_to_mpbcones(dat.con, dat.ncon)
 #
 #     I_A, J_A, V_A = unzip(dat.acoord)
-#     b = zeros(dat.nconstr)
+#     b = zeros(dat.ncon)
 #     for (i,v) in dat.bcoord
 #         b[i] = v
 #     end
 #
-#     psdvarstartidx = Int[]
+#     psdvarstart = Int[]
 #     for i in 1:length(dat.psdvar)
 #         if i == 1
-#             push!(psdvarstartidx,dat.nvar+1)
+#             push!(psdvarstart,dat.nvar+1)
 #         else
-#             push!(psdvarstartidx,psdvarstartidx[i-1] + psd_len(dat.psdvar[i-1]))
+#             push!(psdvarstart,psdvarstart[i-1] + psd_len(dat.psdvar[i-1]))
 #         end
-#         push!(var_cones,(:SDP,psdvarstartidx[i]:psdvarstartidx[i]+psd_len(dat.psdvar[i])-1))
+#         push!(var_cones,(:SDP,psdvarstart[i]:psdvarstart[i]+psd_len(dat.psdvar[i])-1))
 #     end
-#     nvar = (length(dat.psdvar) > 0) ? psdvarstartidx[end] + psd_len(dat.psdvar[end]) - 1 : dat.nvar
+#     nvar = (length(dat.psdvar) > 0) ? psdvarstart[end] + psd_len(dat.psdvar[end]) - 1 : dat.nvar
 #
-#     psdconstartidx = Int[]
+#     psdconstart = Int[]
 #     for i in 1:length(dat.psdcon)
 #         if i == 1
-#             push!(psdconstartidx,dat.nconstr+1)
+#             push!(psdconstart,dat.ncon+1)
 #         else
-#             push!(psdconstartidx,psdconstartidx[i-1] + psd_len(dat.psdcon[i-1]))
+#             push!(psdconstart,psdconstart[i-1] + psd_len(dat.psdcon[i-1]))
 #         end
-#         push!(con_cones,(:SDP,psdconstartidx[i]:psdconstartidx[i]+psd_len(dat.psdcon[i])-1))
+#         push!(con_cones,(:SDP,psdconstart[i]:psdconstart[i]+psd_len(dat.psdcon[i])-1))
 #     end
-#     nconstr = (length(dat.psdcon) > 0) ? psdconstartidx[end] + psd_len(dat.psdcon[end]) - 1 : dat.nconstr
+#     ncon = (length(dat.psdcon) > 0) ? psdconstart[end] + psd_len(dat.psdcon[end]) - 1 : dat.ncon
 #
 #     c = [c;zeros(nvar-dat.nvar)]
 #     for (matidx,i,j,v) in dat.objfcoord
-#         ix = psdvarstartidx[matidx] + idx_to_offset(dat.psdvar[matidx],i,j)
+#         ix = psdvarstart[matidx] + vecoffset(dat.psdvar[matidx],i,j)
 #         @assert c[ix] == 0.0
 #         scale = (i == j) ? 1.0 : sqrt(2)
 #         c[ix] = scale*v
 #     end
 #
 #     for (conidx,matidx,i,j,v) in dat.fcoord
-#         ix = psdvarstartidx[matidx] + idx_to_offset(dat.psdvar[matidx],i,j)
+#         ix = psdvarstart[matidx] + vecoffset(dat.psdvar[matidx],i,j)
 #         push!(I_A,conidx)
 #         push!(J_A,ix)
 #         scale = (i == j) ? 1.0 : sqrt(2)
@@ -194,22 +283,22 @@ end
 #     end
 #
 #     for (conidx,varidx,i,j,v) in dat.hcoord
-#         ix = psdconstartidx[conidx] + idx_to_offset(dat.psdcon[conidx],i,j)
+#         ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
 #         push!(I_A,ix)
 #         push!(J_A,varidx)
 #         scale = (i == j) ? 1.0 : sqrt(2)
 #         push!(V_A,scale*v)
 #     end
 #
-#     b = [b;zeros(nconstr-dat.nconstr)]
+#     b = [b;zeros(ncon-dat.ncon)]
 #     for (conidx,i,j,v) in dat.dcoord
-#         ix = psdconstartidx[conidx] + idx_to_offset(dat.psdcon[conidx],i,j)
+#         ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
 #         @assert b[ix] == 0.0
 #         scale = (i == j) ? 1.0 : sqrt(2)
 #         b[ix] = scale*v
 #     end
 #
-#     A = sparse(I_A,J_A,-V_A,nconstr,nvar)
+#     A = sparse(I_A,J_A,-V_A,ncon,nvar)
 #
 #     vartypes = fill(:Cont, nvar)
 #     vartypes[dat.intlist] .= :Int
@@ -392,14 +481,14 @@ end
 # function moitocbf_solution(dat::CBFData, x::Vector)
 #     scalarsol = x[1:dat.nvar]
 #     psdvarsols = Vector{Matrix{Float64}}()
-#     startidx = dat.nvar+1
+#     start = dat.nvar+1
 #     for i in eachindex(dat.psdvar)
-#         endidx = startidx + psd_len(dat.psdvar[i]) - 1
-#         vecsol = x[startidx:endidx]
+#         endidx = start + psd_len(dat.psdvar[i]) - 1
+#         vecsol = x[start:endidx]
 #         matsol = Matrix{Float64}(undef, dat.psdvar[i], dat.psdvar[i])
 #         mat!(matsol, vecsol)
 #         push!(psdvarsols, matsol)
-#         startidx = endidx + 1
+#         start = endidx + 1
 #     end
 #
 #     return (scalarsol, psdvarsols)
@@ -423,7 +512,7 @@ end
 # psd_len(n) = div(n*(n+1), 2)
 #
 # # returns offset from starting index for (i,j) term in n x n matrix
-# function idx_to_offset(n, i, j)
+# function vecoffset(n, i, j)
 #     @assert 1 <= i <= n
 #     @assert 1 <= j <= n
 #     # upper triangle
