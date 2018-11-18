@@ -54,7 +54,7 @@ function vecoffset(n, i, j)
         (i,j) = (j,i)
     end
     # row major
-    return psd_len(n) - psd_len(n-i+1) + (j-i)
+    return psd_len(n) - psd_len(n-i+1) + j - i + 1
 end
 
 
@@ -75,64 +75,13 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
         error("objective sense $(dat.sense) not recognized")
     end
 
-    # variables
+    # non-PSD variables
     x = MOI.add_variables(model, dat.nvar)
     for j in dat.intlist
         MOI.add_constraint(model, MOI.SingleVariable(x[j]), MOI.Integer())
     end
 
-    # objective terms
-    objaterms = [MOI.ScalarAffineTerm(v, x[a]) for ((a,), v) in dat.objacoord]
-
-    # variable cones
-    k = 0
-    for (cname, csize) in dat.var
-        F = MOI.VectorOfVariables(x[k+1:k+csize])
-        S = cbftomoi_cones(cname, csize)
-        MOI.add_constraint(model, F, S)
-        k += csize
-    end
-    @assert k == dat.nvar
-
-    # constraint cones
-    terms = [Vector{Tuple{Int, Float64}}() for i in 1:dat.ncon]
-    for ((a, b), v) in dat.acoord
-        push!(terms[a], (b, v))
-    end
-
-    offs = zeros(dat.ncon)
-    for ((a,), v) in dat.bcoord
-        offs[a] = v
-    end
-
-    k = 0
-    for (cname, csize) in dat.con
-        vats = Vector{MOI.VectorAffineTerm{Float64}}()
-        for l in 1:csize
-            for (b, v) in terms[k+l]
-                push!(vats, MOI.VectorAffineTerm(l, MOI.ScalarAffineTerm(v, x[b])))
-            end
-        end
-
-        F = MOI.VectorAffineFunction(vats, offs[k+1:k+csize])
-        S = cbftomoi_cones(cname, csize)
-        MOI.add_constraint(model, F, S)
-        k += csize
-    end
-    @assert k == dat.ncon
-
-    # TODO power cones
-
-
-
-
-
-
-    # for i in eachindex(dat.psdvar)
-    #     push!(psdvaridxs, psdvaridxs[i-1] + psd_len(dat.psdvar[i]))
-    # end
-
-    # TODO PSD cones
+    # PSD variables
     npsdvar = 0
     psdvaridxs = UnitRange[]
     for i in eachindex(dat.psdvar)
@@ -142,78 +91,88 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     end
     X = MOI.add_variables(model, npsdvar)
 
-    # objective terms
-    objfterms = [MOI.ScalarAffineTerm(v, X[psdvaridxs[a][vecoffset(dat.psdvar[a], b, c)]])) for ((a, b, c), v) in dat.objfcoord]
+    # objective function
+    objterms = [MOI.ScalarAffineTerm(v, x[a]) for ((a,), v) in dat.objacoord]
+    if npsdvar > 0
+        append!(objterms, MOI.ScalarAffineTerm(v, X[psdvaridxs[a][vecoffset(
+        dat.psdvar[a], b, c)]]) for ((a, b, c), v) in dat.objfcoord)
+    end
+    MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
+        MOI.ScalarAffineFunction(objterms, dat.objoffset))
 
+    # non-PSD variable cones
+    k = 0
+    for (cname, csize) in dat.var
+        F = MOI.VectorOfVariables(x[k+1:k+csize])
+        S = cbftomoi_cones(cname, csize)
+        MOI.add_constraint(model, F, S)
+        k += csize
+    end
+    @assert k == dat.nvar
 
-    # fcoord::Vector{Tuple{NTuple{4, Int}, Float64}}
-    # hcoord::Vector{Tuple{NTuple{4, Int}, Float64}}
-    # dcoord::Vector{Tuple{NTuple{3, Int}, Float64}}
-
-    # variable cones
+    # PSD variable cones
     for i in eachindex(dat.psdvar)
         F = MOI.VectorOfVariables(X[psdvaridxs[i]])
-        S = MOI.PositiveSemidefiniteConeSquare(dat.psdvar[i])
+        S = MOI.PositiveSemidefiniteConeTriangle(dat.psdvar[i])
         MOI.add_constraint(model, F, S)
     end
 
-
-    # push!(var_cones,(:SDP,psdvarstart[i]:psdvarstart[i]+psd_len(dat.psdvar[i])-1))
-
-
-
-
-
-    # constraint cones
-    # push!(con_cones,(:SDP,psdconstart[i]:psdconstart[i]+psd_len(dat.psdcon[i])-1))
-
-
-
-
-    c = [c;zeros(nvar-dat.nvar)]
-
-    for (conidx,matidx,i,j,v) in dat.fcoord
-        ix = psdvarstart[matidx] + vecoffset(dat.psdvar[matidx],i,j)
-        push!(I_A,conidx)
-        push!(J_A,ix)
-        scale = (i == j) ? 1.0 : sqrt(2)
-        push!(V_A,scale*v)
+    # non-PSD constraints
+    conterms = [Vector{MOI.ScalarAffineTerm{Float64}}() for i in 1:dat.ncon]
+    for ((a, b), v) in dat.acoord # non-PSD terms
+        push!(conterms[a], MOI.ScalarAffineTerm(v, x[b]))
+    end
+    for ((a, b, c, d), v) in dat.fcoord # PSD terms
+        idx = psdvaridxs[b][vecoffset(dat.psdvar[b], c, d)]
+        push!(conterms[a], MOI.ScalarAffineTerm(v, X[idx]))
     end
 
-    for (conidx,varidx,i,j,v) in dat.hcoord
-        ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
-        push!(I_A,ix)
-        push!(J_A,varidx)
-        scale = (i == j) ? 1.0 : sqrt(2)
-        push!(V_A,scale*v)
+    conoffs = zeros(dat.ncon)
+    for ((a,), v) in dat.bcoord # constants
+        conoffs[a] = v
     end
 
-    b = [b;zeros(ncon-dat.ncon)]
-    for (conidx,i,j,v) in dat.dcoord
-        ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
-        @assert b[ix] == 0.0
-        scale = (i == j) ? 1.0 : sqrt(2)
-        b[ix] = scale*v
+    k = 0
+    for (cname, csize) in dat.con
+        vats = [MOI.VectorAffineTerm(l, t) for l in 1:csize for t in conterms[k+l]]
+        F = MOI.VectorAffineFunction(vats, conoffs[k+1:k+csize])
+        S = cbftomoi_cones(cname, csize)
+        MOI.add_constraint(model, F, S)
+        k += csize
     end
+    @assert k == dat.ncon
 
-    A = sparse(I_A,J_A,-V_A,ncon,nvar)
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # final objective function
-    objterms = append!(objaterms, objfterms)
-    MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
-        MOI.ScalarAffineFunction(objterms, dat.objoffset))
+    # # PSD constraints
+    # psdconterms = [Vector{MOI.ScalarAffineTerm{Float64}}() for i in eachindex(dat.psdcon)]
+    #
+    #
+    #
+    #
+    # # push!(con_cones,(:SDP,psdconstart[i]:psdconstart[i]+psd_len(dat.psdcon[i])-1))
+    #
+    # # hcoord::Vector{Tuple{NTuple{4, Int}, Float64}}
+    # # dcoord::Vector{Tuple{NTuple{3, Int}, Float64}}
+    #
+    # for (conidx,varidx,i,j,v) in dat.hcoord
+    #     ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
+    #     push!(I_A,ix)
+    #     push!(J_A,varidx)
+    #     scale = (i == j) ? 1.0 : sqrt(2)
+    #     push!(V_A,scale*v)
+    # end
+    #
+    # b = [b;zeros(ncon-dat.ncon)]
+    # for (conidx,i,j,v) in dat.dcoord
+    #     ix = psdconstart[conidx] + vecoffset(dat.psdcon[conidx],i,j)
+    #     @assert b[ix] == 0.0
+    #     scale = (i == j) ? 1.0 : sqrt(2)
+    #     b[ix] = scale*v
+    # end
+    #
+    # A = sparse(I_A,J_A,-V_A,ncon,nvar)
+    #
+    #
+    #
 
     return model
 end
