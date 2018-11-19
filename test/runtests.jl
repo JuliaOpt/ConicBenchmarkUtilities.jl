@@ -47,14 +47,14 @@ optimizer = MOIU.CachingOptimizer(CBUModelData{Float64}(), SCS.Optimizer(verbose
     filename = "example$i" * ".cbf"
     dat = readcbfdata(filename)
     cbftomoi!(optimizer, dat)
-    # @show optimizer
+    MOI.optimize!(optimizer)
 end
 
 @testset "read/write psdvaronly example" begin
     MOI.empty!(optimizer)
     dat = readcbfdata("psdvaronly.cbf")
     cbftomoi!(optimizer, dat)
-    # @show optimizer
+    MOI.optimize!(optimizer)
 end
 
 end
