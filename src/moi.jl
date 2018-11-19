@@ -192,94 +192,6 @@ end
 
 
 
-
-
-# TODO moitocbf function
-
-# TODO remove old code
-#
-# function cbftompb(dat::CBFData)
-#     @assert dat.nvar == (isempty(dat.var) ? 0 : sum(c->c[2],dat.var))
-#     @assert dat.ncon == (isempty(dat.con) ? 0 : sum(c->c[2],dat.con))
-#
-#     c = zeros(dat.nvar)
-#     for (i,v) in dat.objacoord
-#         c[i] = v
-#     end
-#
-#     var_cones = cbfcones_to_mpbcones(dat.var, dat.nvar)
-#     con_cones = cbfcones_to_mpbcones(dat.con, dat.ncon)
-#
-#     I_A, J_A, V_A = unzip(dat.acoord)
-#     b = zeros(dat.ncon)
-#     for (i,v) in dat.bcoord
-#         b[i] = v
-#     end
-#
-#     psdvarstart = Int[]
-#     for i in 1:length(dat.psdvar)
-#         if i == 1
-#             push!(psdvarstart,dat.nvar+1)
-#         else
-#             push!(psdvarstart,psdvarstart[i-1] + psd_len(dat.psdvar[i-1]))
-#         end
-#         push!(var_cones,(:SDP,psdvarstart[i]:psdvarstart[i]+psd_len(dat.psdvar[i])-1))
-#     end
-#     nvar = (length(dat.psdvar) > 0) ? psdvarstart[end] + psd_len(dat.psdvar[end]) - 1 : dat.nvar
-#
-#     psdconstart = Int[]
-#     for i in 1:length(dat.psdcon)
-#         if i == 1
-#             push!(psdconstart,dat.ncon+1)
-#         else
-#             push!(psdconstart,psdconstart[i-1] + psd_len(dat.psdcon[i-1]))
-#         end
-#         push!(con_cones,(:SDP,psdconstart[i]:psdconstart[i]+psd_len(dat.psdcon[i])-1))
-#     end
-#     ncon = (length(dat.psdcon) > 0) ? psdconstart[end] + psd_len(dat.psdcon[end]) - 1 : dat.ncon
-#
-#     c = [c;zeros(nvar-dat.nvar)]
-#     for (matidx,i,j,v) in dat.objfcoord
-#         ix = psdvarstart[matidx] + mattovecidx(dat.psdvar[matidx],i,j)
-#         @assert c[ix] == 0.0
-#         scale = (i == j) ? 1.0 : sqrt(2)
-#         c[ix] = scale*v
-#     end
-#
-#     for (conidx,matidx,i,j,v) in dat.fcoord
-#         ix = psdvarstart[matidx] + mattovecidx(dat.psdvar[matidx],i,j)
-#         push!(I_A,conidx)
-#         push!(J_A,ix)
-#         scale = (i == j) ? 1.0 : sqrt(2)
-#         push!(V_A,scale*v)
-#     end
-#
-#     for (conidx,varidx,i,j,v) in dat.hcoord
-#         ix = psdconstart[conidx] + mattovecidx(dat.psdcon[conidx],i,j)
-#         push!(I_A,ix)
-#         push!(J_A,varidx)
-#         scale = (i == j) ? 1.0 : sqrt(2)
-#         push!(V_A,scale*v)
-#     end
-#
-#     b = [b;zeros(ncon-dat.ncon)]
-#     for (conidx,i,j,v) in dat.dcoord
-#         ix = psdconstart[conidx] + mattovecidx(dat.psdcon[conidx],i,j)
-#         @assert b[ix] == 0.0
-#         scale = (i == j) ? 1.0 : sqrt(2)
-#         b[ix] = scale*v
-#     end
-#
-#     A = sparse(I_A,J_A,-V_A,ncon,nvar)
-#
-#     vartypes = fill(:Cont, nvar)
-#     vartypes[dat.intlist] .= :Int
-#
-#     return c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset
-# end
-
-
-
 # function mpbtocbf(name, c, A, b, con_cones, var_cones, vartypes, sense=:Min)
 #     num_scalar_var = 0
 #     for (cone, idx) in var_cones
@@ -479,18 +391,4 @@ end
 #         kSD += 1
 #     end
 #     return m
-# end
-
-# psd_len(n) = div(n*(n+1), 2)
-#
-# # returns offset from starting index for (i,j) term in n x n matrix
-# function mattovecidx(n, i, j)
-#     @assert 1 <= i <= n
-#     @assert 1 <= j <= n
-#     # upper triangle
-#     if i > j
-#         i,j = j,i
-#     end
-#     # row major
-#     return psd_len(n) - psd_len(n-i+1) + (j-i)
 # end

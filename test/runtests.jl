@@ -9,6 +9,17 @@ const MOIU = MathOptInterface.Utilities
 using SCS
 
 
+MOIU.@model(CBUModelData, (MOI.ZeroOne, MOI.Integer), (),
+    (MOI.Zeros, MOI.Reals, MOI.Nonnegatives, MOI.Nonpositives,
+        MOI.SecondOrderCone, MOI.RotatedSecondOrderCone, MOI.ExponentialCone,
+        MOI.DualExponentialCone, MOI.PowerCone, MOI.DualPowerCone,
+        MOI.PositiveSemidefiniteConeTriangle,),
+    (), (), (), (MOI.VectorOfVariables,), (MOI.VectorAffineFunction,)
+    )
+
+optimizer = MOIU.CachingOptimizer(CBUModelData{Float64}(), SCS.Optimizer(verbose=false))
+
+
 @testset "ConicBenchmarkUtilities tests" begin
 
 # CBF data input/output tests
@@ -29,17 +40,6 @@ end
 end
 
 # MathOptInterface conversion tests
-
-MOIU.@model(CBUModelData, (MOI.ZeroOne, MOI.Integer), (),
-    (MOI.Zeros, MOI.Reals, MOI.Nonnegatives, MOI.Nonpositives,
-        MOI.SecondOrderCone, MOI.RotatedSecondOrderCone, MOI.ExponentialCone,
-        MOI.DualExponentialCone, MOI.PowerCone, MOI.DualPowerCone,
-        MOI.PositiveSemidefiniteConeTriangle,),
-    (), (), (), (MOI.VectorOfVariables,), (MOI.VectorAffineFunction,)
-    )
-
-optimizer = MOIU.CachingOptimizer(CBUModelData{Float64}(), SCS.Optimizer(verbose=true))
-
 # TODO solve the models, test moitocbf and roundtrip
 
 @testset "CBF to MOI example $i" for i in (1, 3, 4)
