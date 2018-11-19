@@ -1,36 +1,37 @@
 
-function cbftomoi_cones(cname, csize::Int)
+# get MOI cone object from CBF cone string and dimension
+function cbftomoi_cones(cname, clen::Int)
     if cname == "L="
         # equal to
-        return MOI.Zeros(csize)
+        return MOI.Zeros(clen)
     elseif cname == "F"
         # free
-        return MOI.Reals(csize)
+        return MOI.Reals(clen)
     elseif cname == "L-"
         # nonpositive
-        return MOI.Nonpositives(csize)
+        return MOI.Nonpositives(clen)
     elseif cname == "L+"
         # nonnegative
-        return MOI.Nonnegatives(csize)
+        return MOI.Nonnegatives(clen)
     elseif cname == "Q"
         # second-order cone
-        @assert csize >= 3
-        return MOI.SecondOrderCone(csize)
+        @assert clen >= 3
+        return MOI.SecondOrderCone(clen)
     elseif cname == "QR"
         # rotated second-order cone
-        @assert csize >= 3
-        return MOI.RotatedSecondOrderCone(csize)
+        @assert clen >= 3
+        return MOI.RotatedSecondOrderCone(clen)
     elseif cname == "EXP"
         # exponential
-        @assert csize == 3
+        @assert clen == 3
         return MOI.ExponentialCone()
     elseif cname == "EXP*"
         # dual exponential
-        @assert csize == 3
+        @assert clen == 3
         return MOI.DualExponentialCone()
     # elseif cname in ("POWER", "POWER*")
     #     # power (parametrized)
-    #     if csize != 3 || length(params) != 2
+    #     if clen != 3 || length(params) != 2
     #         error("currently cannot handle power cones that aren't equivalent to MathOptInterface's 3D-PowerCone definition (or its dual cone)")
     #     end
     #     sigma = sum(params)
@@ -45,9 +46,10 @@ function cbftomoi_cones(cname, csize::Int)
     end
 end
 
+# get vector length of triangle of symmetric n*n matrix
 psd_len(n) = div(n*(n+1), 2)
 
-# returns vector index for (i,j) term in n x n matrix
+# get vector index for (i,j) term in n*n matrix
 function mattovecidx(n, i, j)
     @assert 1 <= i <= n
     @assert 1 <= j <= n
@@ -58,7 +60,6 @@ function mattovecidx(n, i, j)
     # row major
     return psd_len(n) - psd_len(n-i+1) + j - i + 1
 end
-
 
 function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     @assert dat.nvar == (isempty(dat.var) ? 0 : sum(c -> c[2], dat.var))
@@ -103,14 +104,14 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
 
     # non-PSD variable cones
     k = 0
-    for (cname, csize) in dat.var
-        S = cbftomoi_cones(cname, csize)
+    for (cname, clen) in dat.var
+        S = cbftomoi_cones(cname, clen)
         if !(S isa MOI.Reals)
-            F = MOI.VectorOfVariables(x[k .+ (1:csize)])
+            F = MOI.VectorOfVariables(x[k .+ (1:clen)])
             @assert MOI.output_dimension(F) == MOI.dimension(S)
             MOI.add_constraint(model, F, S)
         end
-        k += csize
+        k += clen
     end
     @assert k == dat.nvar
 
@@ -139,13 +140,13 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
         end
 
         k = 0
-        for (cname, csize) in dat.con
-            vats = [MOI.VectorAffineTerm(l, t) for l in 1:csize for t in conterms[k+l]]
-            F = MOI.VectorAffineFunction(vats, conoffs[k .+ (1:csize)])
-            S = cbftomoi_cones(cname, csize)
+        for (cname, clen) in dat.con
+            vats = [MOI.VectorAffineTerm(l, t) for l in 1:clen for t in conterms[k+l]]
+            F = MOI.VectorAffineFunction(vats, conoffs[k .+ (1:clen)])
+            S = cbftomoi_cones(cname, clen)
             @assert MOI.output_dimension(F) == MOI.dimension(S)
             MOI.add_constraint(model, F, S)
-            k += csize
+            k += clen
         end
         @assert k == dat.ncon
     end
