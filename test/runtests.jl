@@ -1,29 +1,47 @@
 
 using ConicBenchmarkUtilities
 using Test
-using SparseArrays
-using LinearAlgebra
 using MathOptInterface
 const MOI = MathOptInterface
 const MOIU = MathOptInterface.Utilities
-using SCS
+# using SCS
+using Hypatia
 
+# MOIU.@model(SCSModelData, (MOI.ZeroOne, MOI.Integer), (),
+#     (MOI.Zeros, MOI.Reals, MOI.Nonnegatives, MOI.Nonpositives,
+#         MOI.SecondOrderCone, MOI.RotatedSecondOrderCone, MOI.ExponentialCone,
+#         MOI.DualExponentialCone, MOI.PowerCone, MOI.DualPowerCone,
+#         MOI.PositiveSemidefiniteConeTriangle,),
+#     (), (), (), (MOI.VectorOfVariables,), (MOI.VectorAffineFunction,)
+#     )
 
-MOIU.@model(CBUModelData, (MOI.ZeroOne, MOI.Integer), (),
-    (MOI.Zeros, MOI.Reals, MOI.Nonnegatives, MOI.Nonpositives,
-        MOI.SecondOrderCone, MOI.RotatedSecondOrderCone, MOI.ExponentialCone,
-        MOI.DualExponentialCone, MOI.PowerCone, MOI.DualPowerCone,
-        MOI.PositiveSemidefiniteConeTriangle,),
-    (), (), (), (MOI.VectorOfVariables,), (MOI.VectorAffineFunction,)
+MOIU.@model(HypatiaModelData,
+    (),
+    (
+        MOI.EqualTo, MOI.GreaterThan, MOI.LessThan, MOI.Interval,
+    ),
+    (
+        MOI.Zeros, MOI.Nonnegatives, MOI.Nonpositives,
+        MOI.SecondOrderCone, MOI.RotatedSecondOrderCone,
+        MOI.ExponentialCone, MOI.PowerCone, MOI.GeometricMeanCone,
+        MOI.PositiveSemidefiniteConeTriangle,
+        MOI.LogDetConeTriangle,
+    ),
+    (),
+    (MOI.SingleVariable,),
+    (MOI.ScalarAffineFunction,),
+    (MOI.VectorOfVariables,),
+    (MOI.VectorAffineFunction,),
     )
 
-optimizer = MOIU.CachingOptimizer(CBUModelData{Float64}(), SCS.Optimizer(verbose=false))
+
+# optimizer = MOIU.CachingOptimizer(SCSModelData{Float64}(), SCS.Optimizer(eps=1e-6, verbose=true))
+optimizer = MOIU.CachingOptimizer(HypatiaModelData{Float64}(), Hypatia.Optimizer(verbose=true))
 
 
 @testset "ConicBenchmarkUtilities tests" begin
 
 # CBF data input/output tests
-
 @testset "read/write CBF $filename" for filename in ("example1", "example3", "example4", "psdvaronly")
     dat = readcbfdata(filename * ".cbf")
     if startswith(filename, "example")
@@ -36,104 +54,26 @@ optimizer = MOIU.CachingOptimizer(CBUModelData{Float64}(), SCS.Optimizer(verbose
     rm("example_out.cbf")
 
     # TODO delete
+    # println("\n\n\n")
+    @show filename
     MOI.empty!(optimizer)
     cbftomoi!(optimizer, dat)
+    # @show optimizer
     MOI.optimize!(optimizer)
+    (x, X) = moitocbf_solution(dat, optimizer)
+    @show x
+    @show X
+    println()
+    # println(optimizer.optimizer.c)
+    # println(optimizer.optimizer.A)
+    # println(optimizer.optimizer.b)
+    # println(optimizer.optimizer.G)
+    # println(optimizer.optimizer.h)
+    # println(optimizer.optimizer.cone)
+    # println(optimizer.optimizer.x)
 end
 
 # MathOptInterface conversion tests
-
-
-# TODO adapt these tests for examples
-
-# @testset "example 1" begin
-#     dat = readcbfdata("example1.cbf")
-#     (c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset) = cbftompb(dat)
-#     m = MathProgBase.ConicModel(SCSSOLVER)
-#     MathProgBase.loadproblem!(m, c, A, b, con_cones, var_cones)
-#     MathProgBase.optimize!(m)
-#     @test MathProgBase.status(m) == :Optimal
-#
-#     (scalar_solution, psdvar_solution) = ConicBenchmarkUtilities.moitocbf_solution(dat,MathProgBase.getsolution(m))
-#
-#     jm = JuMP.Model(solver=SCSSOLVER)
-#     @JuMP.variable(jm, x[1:3])
-#     @JuMP.variable(jm, X[1:3,1:3], SDP)
-#
-#     @JuMP.objective(jm, Min, dot([2 1 0; 1 2 1; 0 1 2],X) + x[2])
-#     @JuMP.constraint(jm, X[1,1]+X[2,2]+X[3,3]+x[2] == 1.0)
-#     @JuMP.constraint(jm, dot(ones(3,3),X) + x[1] + x[3] == 0.5)
-#     @JuMP.constraint(jm, norm([x[1],x[3]]) <= x[2])
-#     @test JuMP.solve(jm) == :Optimal
-#     @test JuMP.getobjectivevalue(jm) ≈ MathProgBase.getobjval(m) atol=1e-4
-#     for i in 1:3
-#         @test JuMP.getvalue(x[i]) ≈ scalar_solution[i] atol=1e-4
-#     end
-#     for i in 1:3, j in 1:3
-#         @test JuMP.getvalue(X[i,j]) ≈ psdvar_solution[1][i,j] atol=1e-4
-#     end
-# end
-#
-# @testset "example 3" begin
-#     dat = readcbfdata("example3.cbf")
-#     (c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset) = cbftompb(dat)
-#
-#     @test dat.sense == :Min
-#     @test dat.objoffset == 1.0
-#     @test all(vartypes .== :Cont)
-#
-#     m = MathProgBase.ConicModel(SCSSOLVER)
-#     MathProgBase.loadproblem!(m, c, A, b, con_cones, var_cones)
-#     MathProgBase.optimize!(m)
-#     @test MathProgBase.status(m) == :Optimal
-#
-#     scalar_solution, psdvar_solution = ConicBenchmarkUtilities.moitocbf_solution(dat,MathProgBase.getsolution(m))
-#
-#     jm = JuMP.Model(solver=SCSSOLVER)
-#     @JuMP.variable(jm, x[1:2])
-#     @JuMP.variable(jm, X[1:2,1:2], SDP)
-#
-#     @JuMP.objective(jm, Min, X[1,1] + X[2,2] + x[1] + x[2] + 1)
-#     @JuMP.constraint(jm, X[1,2] + X[2,1] - x[1] - x[2] ≥ 0.0)
-#     @JuMP.SDconstraint(jm, [0 1; 1 3]*x[1] + [3 1; 1 0]*x[2] - [1 0; 0 1] >= 0)
-#
-#     @test JuMP.solve(jm) == :Optimal
-#     @test JuMP.getobjectivevalue(jm) ≈ MathProgBase.getobjval(m)+dat.objoffset atol=1e-4
-#     for i in 1:2
-#         @test JuMP.getvalue(x[i]) ≈ scalar_solution[i] atol=1e-4
-#     end
-#     for i in 1:2, j in 1:2
-#         @test JuMP.getvalue(X[i,j]) ≈ psdvar_solution[1][i,j] atol=1e-4
-#     end
-# end
-
-# @testset "example 4" begin
-#     dat = readcbfdata("example4.cbf")
-#     c, A, b, con_cones, var_cones, vartypes, dat.sense, dat.objoffset = cbftompb(dat)
-#
-#     @test c ≈ [1.0, 0.64]
-#     @test A ≈ [-50.0 -31; -3.0 2.0]
-#     @test b ≈ [-250.0, 4.0]
-#     @test vartypes == [:Cont, :Cont]
-#     @test dat.sense == :Max
-#     @test dat.objoffset == 0.0
-#     @test con_cones == [(:NonPos,[1]),(:NonNeg,[2])]
-#
-#     m = MathProgBase.ConicModel(SCSSOLVER)
-#     MathProgBase.loadproblem!(m, -c, A, b, con_cones, var_cones)
-#     MathProgBase.optimize!(m)
-#
-#     x_sol = MathProgBase.getsolution(m)
-#     objval = MathProgBase.getobjval(m)
-#
-#     test CBF writer
-#     newdat = mpbtocbf("example", c, A, b, con_cones, var_cones, vartypes, dat.sense)
-#     writecbfdata("example_out.cbf", newdat, "# Example C.4 from the CBF documentation version 2")
-#     @test strip(read("example4.cbf", String)) == strip(read("example_out.cbf", String))
-#     rm("example_out.cbf")
-# end
-
-
 
 
 # TODO use MOI conic tests: write then read CBF, convert to MOI, then solve and run the optimizer and result checks

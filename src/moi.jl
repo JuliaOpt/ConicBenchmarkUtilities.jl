@@ -49,16 +49,45 @@ end
 # get vector length of triangle of symmetric n*n matrix
 psd_len(n) = div(n*(n+1), 2)
 
-# get vector index for (i,j) term in n*n matrix
-function mattovecidx(n, i, j)
-    @assert 1 <= i <= n
-    @assert 1 <= j <= n
-    # upper triangle
-    if i > j
+# get vector index (lower triangle, row major) for (i,j) term in n*n matrix
+function mattovecidx(i, j)
+    if i < j
         (i,j) = (j,i)
     end
-    # row major
-    return psd_len(n) - psd_len(n-i+1) + j - i + 1
+    return div((i-1)*i, 2) + j
+end
+
+# convert an MOI solution to a CBF solution
+function moitocbf_solution(dat::CBFData, model::MOI.ModelLike)
+    vars = MOI.get(model, MOI.ListOfVariableIndices())
+    soln = MOI.get(model, MOI.VariablePrimal(), vars)
+    scalar_soln = soln[1:dat.nvar]
+    matrix_soln = Vector{Matrix{Float64}}()
+    k = dat.nvar
+    for i in eachindex(dat.psdvar)
+        side = dat.psdvar[i]
+        veclen = psd_len(side)
+        veci = soln[k .+ (1:veclen)]
+        mati = Matrix{Float64}(undef, side, side)
+        vectomat!(mati, veci, side)
+        push!(matrix_soln, mati)
+        k += veclen
+    end
+    return (scalar_soln, matrix_soln)
+end
+
+# fill a PSD matrix from a PSD vector (lower triangle, row major)
+function vectomat!(m::Matrix{Float64}, v::Vector{Float64}, side::Int)
+    k = 1
+    for i in 1:side, j in i:side
+        if j == i
+            m[i,j] = v[k]
+        else
+            m[i,j] = m[j,i] = v[k]
+        end
+        k += 1
+    end
+    return m
 end
 
 function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
@@ -97,7 +126,7 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     # objective function
     objterms = [MOI.ScalarAffineTerm(v, x[a]) for ((a,), v) in dat.objacoord]
     append!(objterms, MOI.ScalarAffineTerm(v,
-        X[psdvaridxs[a][mattovecidx(dat.psdvar[a], b, c)]]
+        X[psdvaridxs[a][mattovecidx(b, c)]]
         ) for ((a, b, c), v) in dat.objfcoord)
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
         MOI.ScalarAffineFunction(objterms, dat.objoffset))
@@ -119,6 +148,9 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     for i in eachindex(dat.psdvar)
         F = MOI.VectorOfVariables(X[psdvaridxs[i]])
         S = MOI.PositiveSemidefiniteConeTriangle(dat.psdvar[i])
+        # println()
+        # println(F)
+        # println(S)
         @assert MOI.output_dimension(F) == MOI.dimension(S)
         MOI.add_constraint(model, F, S)
     end
@@ -130,7 +162,7 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
             push!(conterms[a], MOI.ScalarAffineTerm(v, x[b]))
         end
         for ((a, b, c, d), v) in dat.fcoord # PSD terms
-            idx = psdvaridxs[b][mattovecidx(dat.psdvar[b], c, d)]
+            idx = psdvaridxs[b][mattovecidx(c, d)]
             push!(conterms[a], MOI.ScalarAffineTerm(v, X[idx]))
         end
 
@@ -144,6 +176,10 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
             vats = [MOI.VectorAffineTerm(l, t) for l in 1:clen for t in conterms[k+l]]
             F = MOI.VectorAffineFunction(vats, conoffs[k .+ (1:clen)])
             S = cbftomoi_cones(cname, clen)
+            # println()
+            # println(cname)
+            # println(F)
+            # println(S)
             @assert MOI.output_dimension(F) == MOI.dimension(S)
             MOI.add_constraint(model, F, S)
             k += clen
@@ -164,13 +200,13 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
 
         psdconterms = [Vector{MOI.ScalarAffineTerm{Float64}}() for i in 1:npsdcon]
         for ((a, b, c, d), v) in dat.hcoord # PSD terms
-            idx = first(psdconidxs[a]) - 1 + mattovecidx(dat.psdcon[a], c, d)
+            idx = first(psdconidxs[a]) - 1 + mattovecidx(c, d)
             push!(psdconterms[idx], MOI.ScalarAffineTerm(v, x[b]))
         end
 
         psdconoffs = zeros(npsdcon)
         for ((a, b, c), v) in dat.dcoord # constants
-            idx = first(psdconidxs[a]) - 1 + mattovecidx(dat.psdcon[a], b, c)
+            idx = first(psdconidxs[a]) - 1 + mattovecidx(b, c)
             psdconoffs[idx] = v
         end
 
@@ -180,6 +216,9 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
             vats = [MOI.VectorAffineTerm(l-k, t) for l in idxs for t in psdconterms[l]]
             F = MOI.VectorAffineFunction(vats, psdconoffs[idxs])
             S = MOI.PositiveSemidefiniteConeTriangle(dat.psdcon[i])
+            # println()
+            # println(F)
+            # println(S)
             @assert MOI.output_dimension(F) == MOI.dimension(S)
             MOI.add_constraint(model, F, S)
             k += length(idxs)
@@ -358,37 +397,4 @@ end
 #     end
 #
 #     return CBFData(name,sense,var,psdvar,con,psdcon,objacoord,objfcoord,0.0,fcoord,acoord,bcoord,hcoord,dcoord,intlist,num_scalar_var,num_scalar_con)
-# end
-
-# # converts an MPB solution to CBF solution
-# # no transformation needed unless PSD vars present
-# function moitocbf_solution(dat::CBFData, x::Vector)
-#     scalarsol = x[1:dat.nvar]
-#     psdvarsols = Vector{Matrix{Float64}}()
-#     start = dat.nvar+1
-#     for i in eachindex(dat.psdvar)
-#         endidx = start + psd_len(dat.psdvar[i]) - 1
-#         vecsol = x[start:endidx]
-#         matsol = Matrix{Float64}(undef, dat.psdvar[i], dat.psdvar[i])
-#         mat!(matsol, vecsol)
-#         push!(psdvarsols, matsol)
-#         start = endidx + 1
-#     end
-#
-#     return (scalarsol, psdvarsols)
-# end
-#
-# # Copied from Pajarito.jl
-# function mat!(m::Matrix{Float64}, v::Vector{Float64})
-#     dim = size(m, 1)
-#     kSD = 1
-#     for jSD in 1:dim, iSD in jSD:dim
-#         if jSD == iSD
-#             m[iSD, jSD] = v[kSD]
-#         else
-#             m[iSD, jSD] = m[jSD, iSD] = v[kSD]
-#         end
-#         kSD += 1
-#     end
-#     return m
 # end
