@@ -1,30 +1,5 @@
 
-mutable struct CBFData
-    name::String
-    sense::Symbol
-    objoffset::Float64
-
-    nvar::Int
-    var::Vector{Tuple{String, Int}}
-    psdvar::Vector{Int}
-    intlist::Vector{Int}
-
-    ncon::Int
-    con::Vector{Tuple{String, Int}}
-    psdcon::Vector{Int}
-
-    objacoord::Vector{Tuple{NTuple{1, Int}, Float64}}
-    acoord::Vector{Tuple{NTuple{2, Int}, Float64}}
-    bcoord::Vector{Tuple{NTuple{1, Int}, Float64}}
-    objfcoord::Vector{Tuple{NTuple{3, Int}, Float64}}
-    fcoord::Vector{Tuple{NTuple{4, Int}, Float64}}
-    hcoord::Vector{Tuple{NTuple{4, Int}, Float64}}
-    dcoord::Vector{Tuple{NTuple{3, Int}, Float64}}
-end
-
-CBFData() = CBFData("", :xxx, 0.0, 0, [], [], [], 0, [], [], [], [], [], [], [], [], [])
-
-function parse_matblock(fd, outputmat::Vector{Tuple{NTuple{N, Int}, Float64}}) where N
+function parsecoords(fd, outputmat::Vector{Tuple{NTuple{N, Int}, Float64}}) where N
     numnz = parse(Int, strip(readline(fd)))
     for k in 1:numnz
         linesplit = split(strip(readline(fd)))
@@ -60,7 +35,14 @@ function readcbfdata(filename)
         end
 
         if startswith(line, "OBJSENSE")
-            dat.sense = (strip(readline(fd)) == "MIN") ? :Min : :Max
+            objsense = strip(readline(fd))
+            if objsense == "MIN"
+                dat.sense = :Min
+            elseif objsense == "MAX"
+                dat.sense = :Max
+            else
+                error("Objective sense $objsense not recognized")
+            end
             continue
         end
 
@@ -119,37 +101,44 @@ function readcbfdata(filename)
             continue
         end
 
+        if startswith(line, "OBJFCOORD")
+            parsecoords(fd, dat.objfcoord)
+            continue
+        end
+
         if startswith(line, "OBJACOORD")
-            parse_matblock(fd, dat.objacoord)
+            parsecoords(fd, dat.objacoord)
+            continue
         end
 
         if startswith(line, "OBJBCOORD")
-            dat.objoffset = parse(Float64, strip(readline(fd)))
-            println("instance has objective offset")
-        end
-
-        if startswith(line, "BCOORD")
-            parse_matblock(fd, dat.bcoord)
-        end
-
-        if startswith(line, "ACOORD")
-            parse_matblock(fd, dat.acoord)
-        end
-
-        if startswith(line, "OBJFCOORD")
-            parse_matblock(fd, dat.objfcoord)
+            dat.objbcoord = parse(Float64, strip(readline(fd)))
+            continue
         end
 
         if startswith(line, "FCOORD")
-            parse_matblock(fd, dat.fcoord)
+            parsecoords(fd, dat.fcoord)
+            continue
+        end
+
+        if startswith(line, "ACOORD")
+            parsecoords(fd, dat.acoord)
+            continue
+        end
+
+        if startswith(line, "BCOORD")
+            parsecoords(fd, dat.bcoord)
+            continue
         end
 
         if startswith(line, "HCOORD")
-            parse_matblock(fd, dat.hcoord)
+            parsecoords(fd, dat.hcoord)
+            continue
         end
 
         if startswith(line, "DCOORD")
-            parse_matblock(fd, dat.dcoord)
+            parsecoords(fd, dat.dcoord)
+            continue
         end
     end
 
@@ -241,9 +230,9 @@ function writecbfdata(filename, dat::CBFData, comments="")
         println(fd)
     end
 
-    if !iszero(dat.objoffset)
+    if !iszero(dat.objbcoord)
         println(fd, "OBJBCOORD")
-        println(fd, dat.objoffset)
+        println(fd, dat.objbcoord)
         println(fd)
     end
 
