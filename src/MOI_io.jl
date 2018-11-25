@@ -1,29 +1,4 @@
 
-# get MOI vector cone object from CBF vector cone string and dimension
-function cbftomoi_cones(cname::AbstractString, clen::Int)
-    if cname == "L="
-        return MOI.Zeros(clen)
-    elseif cname == "L-"
-        return MOI.Nonpositives(clen)
-    elseif cname == "L+"
-        return MOI.Nonnegatives(clen)
-    elseif cname == "Q"
-        @assert clen >= 3
-        return MOI.SecondOrderCone(clen)
-    elseif cname == "QR"
-        @assert clen >= 3
-        return MOI.RotatedSecondOrderCone(clen)
-    elseif cname == "EXP"
-        @assert clen == 3
-        return MOI.ExponentialCone()
-    elseif cname == "EXP*"
-        @assert clen == 3
-        return MOI.DualExponentialCone()
-    else
-        error("cone type $cname is not recognized")
-    end
-end
-
 # get CBF vector cone string from MOI vector cone object
 moitocbf_cone(::MOI.EqualTo{Float64}) = "L="
 moitocbf_cone(::MOI.GreaterThan{Float64}) = "L+"
@@ -50,7 +25,7 @@ end
 
 # get (i,j) matrix indices (lower triangle, row major) for kth term in vector
 function vectomatidx(k)
-    i = floor(Int, (1+sqrt(8*k-7))/2)
+    i = div(1 + isqrt(8k-7), 2)
     j = k - div(i*(i-1), 2)
     return (i,j)
 end
@@ -117,27 +92,47 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
     # non-PSD variable cones
     k = 0
     for (cname, clen) in dat.var
-        if cname == "F"
+        if cname == "F" # ignore free cones
             k += clen
-            continue # ignore free variable cones
+            continue
         end
 
-        if cname in ("POWER", "POWER*") # TODO power cones
-            error("Power cones not currently supported by ConicBenchmarkUtilities")
-            # if clen != 3 || length(params) != 2
-            #     error("currently cannot handle power cones that aren't equivalent to MathOptInterface's 3D-PowerCone definition (or its dual cone)")
-            # end
-            # sigma = sum(params) # TODO get power cone parameters vector
-            # exponent = params[1]/sigma
-            # if cname == "POWER"
-            #     S = MOI.PowerCone(exponent)
-            # else
-            #     S = MOI.DualPowerCone(exponent)
-            # end
+        if cname in ("EXP", "EXP*") # reverse order
+            @assert clen == 3
+            F = MOI.VectorOfVariables(x[k+3,k+2,k+1])
+            S = (cname == "EXP") ? MOI.ExponentialCone() : MOI.DualExponentialCone()
         else
-            S = cbftomoi_cones(cname, clen)
+            F = MOI.VectorOfVariables(x[k .+ (1:clen)])
+
+            if cname in ("POWER", "POWER*") # TODO power cones equivalent to MathOptInterface's 3D-PowerCone definition
+                error("Power cones not currently supported by ConicBenchmarkUtilities")
+                # if clen != 3 || length(params) != 2
+                #     error("currently cannot handle power cones that aren't equivalent to MathOptInterface's 3D-PowerCone definition (or its dual cone)")
+                # end
+                # sigma = sum(params) # TODO get power cone parameters vector
+                # exponent = params[1]/sigma
+                # if cname == "POWER"
+                #     S = MOI.PowerCone(exponent)
+                # else
+                #     S = MOI.DualPowerCone(exponent)
+                # end
+            elseif cname == "L="
+                S = MOI.Zeros(clen)
+            elseif cname == "L-"
+                S = MOI.Nonpositives(clen)
+            elseif cname == "L+"
+                S = MOI.Nonnegatives(clen)
+            elseif cname == "Q"
+                @assert clen >= 3
+                S = MOI.SecondOrderCone(clen)
+            elseif cname == "QR"
+                @assert clen >= 3
+                S = MOI.RotatedSecondOrderCone(clen)
+            else
+                error("cone type $cname is not recognized")
+            end
         end
-        F = MOI.VectorOfVariables(x[k .+ (1:clen)])
+
         @assert MOI.output_dimension(F) == MOI.dimension(S)
         MOI.add_constraint(model, F, S)
         k += clen
@@ -173,9 +168,49 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
 
         k = 0
         for (cname, clen) in dat.con
-            vats = [MOI.VectorAffineTerm(l, t) for l in 1:clen for t in conterms[k+l]]
-            F = MOI.VectorAffineFunction(vats, conoffs[k .+ (1:clen)])
-            S = cbftomoi_cones(cname, clen)
+            if cname == "F" # ignore free cones
+                k += clen
+                continue
+            end
+
+            if cname in ("EXP", "EXP*") # reverse order
+                @assert clen == 3
+                vats = [MOI.VectorAffineTerm(4-l, t) for l in 1:clen for t in conterms[k+l]]
+                F = MOI.VectorAffineFunction(vats, conoffs[[k+3,k+2,k+1]])
+                S = (cname == "EXP") ? MOI.ExponentialCone() : MOI.DualExponentialCone()
+            else
+                vats = [MOI.VectorAffineTerm(l, t) for l in 1:clen for t in conterms[k+l]]
+                F = MOI.VectorAffineFunction(vats, conoffs[k .+ (1:clen)])
+
+                if cname in ("POWER", "POWER*") # TODO power cones equivalent to MathOptInterface's 3D-PowerCone definition
+                    error("Power cones not currently supported by ConicBenchmarkUtilities")
+                    # if clen != 3 || length(params) != 2
+                    #     error("currently cannot handle power cones that aren't equivalent to MathOptInterface's 3D-PowerCone definition (or its dual cone)")
+                    # end
+                    # sigma = sum(params) # TODO get power cone parameters vector
+                    # exponent = params[1]/sigma
+                    # if cname == "POWER"
+                    #     S = MOI.PowerCone(exponent)
+                    # else
+                    #     S = MOI.DualPowerCone(exponent)
+                    # end
+                elseif cname == "L="
+                    S = MOI.Zeros(clen)
+                elseif cname == "L-"
+                    S = MOI.Nonpositives(clen)
+                elseif cname == "L+"
+                    S = MOI.Nonnegatives(clen)
+                elseif cname == "Q"
+                    @assert clen >= 3
+                    S = MOI.SecondOrderCone(clen)
+                elseif cname == "QR"
+                    @assert clen >= 3
+                    S = MOI.RotatedSecondOrderCone(clen)
+                else
+                    error("cone type $cname is not recognized")
+                end
+            end
+
             @assert MOI.output_dimension(F) == MOI.dimension(S)
             MOI.add_constraint(model, F, S)
             k += clen
@@ -302,7 +337,11 @@ function moitocbf(model)
         MOI.DualExponentialCone,
         )
         for ci in getmodelcons(MOI.VectorOfVariables, S)
-            for vj in getconfun(ci).variables
+            vars = getconfun(ci).variables
+            if S in (MOI.ExponentialCone, MOI.DualExponentialCone) # reverse order
+                reverse!(vars)
+            end
+            for vj in vars
                 dat.ncon += 1
                 push!(dat.acoord, ((dat.ncon, vj.value), 1.0))
             end
@@ -312,15 +351,29 @@ function moitocbf(model)
 
         for ci in getmodelcons(MOI.VectorAffineFunction{Float64}, S)
             fi = getconfun(ci)
-            for vt in fi.terms
-                push!(dat.acoord, ((dat.ncon+vt.output_index, vt.scalar_term.variable_index.value),
-                    vt.scalar_term.coefficient))
-            end
             si = getconset(ci)
             dim = MOI.dimension(si)
-            for row in 1:dim
-                dat.ncon += 1
-                push!(dat.bcoord, ((dat.ncon,), fi.constants[row]))
+            if S in (MOI.ExponentialCone, MOI.DualExponentialCone) # reverse order
+                @assert dim == 3
+                for vt in fi.terms
+                    idx = dat.ncon + 4 - vt.output_index
+                    push!(dat.acoord, ((idx, vt.scalar_term.variable_index.value),
+                        vt.scalar_term.coefficient))
+                end
+                for row in [3,2,1]
+                    dat.ncon += 1
+                    push!(dat.bcoord, ((dat.ncon,), fi.constants[row]))
+                end
+            else
+                for vt in fi.terms
+                    idx = dat.ncon + vt.output_index
+                    push!(dat.acoord, ((idx, vt.scalar_term.variable_index.value),
+                        vt.scalar_term.coefficient))
+                end
+                for row in 1:dim
+                    dat.ncon += 1
+                    push!(dat.bcoord, ((dat.ncon,), fi.constants[row]))
+                end
             end
             push!(dat.con, (moitocbf_cone(si), dim))
         end
