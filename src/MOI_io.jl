@@ -30,8 +30,8 @@ moitocbf_cone(::MOI.GreaterThan{Float64}) = "L+"
 moitocbf_cone(::MOI.LessThan{Float64}) = "L-"
 moitocbf_cone(::MOI.Zeros) = "L="
 moitocbf_cone(::MOI.Reals) = "F"
-moitocbf_cone(::MOI.Nonnegatives) = "L-"
-moitocbf_cone(::MOI.Nonpositives) = "L+"
+moitocbf_cone(::MOI.Nonnegatives) = "L+"
+moitocbf_cone(::MOI.Nonpositives) = "L-"
 moitocbf_cone(::MOI.SecondOrderCone) = "Q"
 moitocbf_cone(::MOI.RotatedSecondOrderCone) = "QR"
 moitocbf_cone(::MOI.ExponentialCone) = "EXP"
@@ -50,8 +50,8 @@ end
 
 # get (i,j) matrix indices (lower triangle, row major) for kth term in vector
 function vectomatidx(k)
-    i = isqrt(2*k)
-    j = k - div((i-1)*i, 2)
+    i = floor(Int, (1+sqrt(8*k-7))/2)
+    j = k - div(i*(i-1), 2)
     return (i,j)
 end
 
@@ -105,9 +105,12 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
 
     # objective function
     objterms = [MOI.ScalarAffineTerm(v, x[a]) for ((a,), v) in dat.objacoord]
-    append!(objterms, MOI.ScalarAffineTerm(v,
-        X[psdvaridxs[a][mattovecidx(b, c)]]
-        ) for ((a, b, c), v) in dat.objfcoord)
+    for ((a, b, c), v) in dat.objfcoord
+        if b != c
+            v += v # scale off-diagonals
+        end
+        push!(objterms, MOI.ScalarAffineTerm(v, X[psdvaridxs[a][mattovecidx(b, c)]]))
+    end
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(),
         MOI.ScalarAffineFunction(objterms, dat.objbcoord))
 
@@ -156,6 +159,9 @@ function cbftomoi!(model::MOI.ModelLike, dat::CBFData)
             push!(conterms[a], MOI.ScalarAffineTerm(v, x[b]))
         end
         for ((a, b, c, d), v) in dat.fcoord # PSD terms
+            if c != d
+                v += v # scale off-diagonals
+            end
             idx = psdvaridxs[b][mattovecidx(c, d)]
             push!(conterms[a], MOI.ScalarAffineTerm(v, X[idx]))
         end
@@ -230,8 +236,6 @@ function moitocbf(model)
     getconset(conidx) = MOI.get(model, MOI.ConstraintSet(), conidx)
 
     dat = CBFData() # CBF data object to be returned
-
-    dat.name = MOI.get(model, MOI.Name()) # model name
 
     # objective sense
     objsense = MOI.get(model, MOI.ObjectiveSense())
@@ -309,7 +313,8 @@ function moitocbf(model)
         for ci in getmodelcons(MOI.VectorAffineFunction{Float64}, S)
             fi = getconfun(ci)
             for vt in fi.terms
-                push!(dat.acoord, ((dat.ncon+vt.output_index, vt.scalar_term.variable_index.value), vt.scalar_term.coefficient))
+                push!(dat.acoord, ((dat.ncon+vt.output_index, vt.scalar_term.variable_index.value),
+                    vt.scalar_term.coefficient))
             end
             si = getconset(ci)
             dim = MOI.dimension(si)
@@ -344,12 +349,15 @@ function moitocbf(model)
         fi = getconfun(ci)
         for vt in fi.terms
             (i,j) = vectomatidx(vt.output_index)
-            push!(dat.hcoord, ((npsdcon, vt.scalar_term.variable_index.value, i, j), vt.scalar_term.coefficient))
+            push!(dat.hcoord, ((npsdcon, vt.scalar_term.variable_index.value, i, j),
+                vt.scalar_term.coefficient))
         end
         k = 0
         for i in 1:side, j in 1:i
             k += 1
-            push!(dat.dcoord, ((npsdcon, i, j), fi.constants[k]))
+            if !iszero(fi.constants[k])
+                push!(dat.dcoord, ((npsdcon, i, j), fi.constants[k]))
+            end
         end
         @assert k == MOI.output_dimension(fi)
         push!(dat.psdcon, side)
@@ -362,7 +370,9 @@ end
 function moitocbf_solution(dat::CBFData, model::MOI.ModelLike)
     vars = MOI.get(model, MOI.ListOfVariableIndices())
     soln = MOI.get(model, MOI.VariablePrimal(), vars)
+
     scalar_soln = soln[1:dat.nvar]
+
     matrix_soln = Vector{Matrix{Float64}}()
     k = dat.nvar
     for i in eachindex(dat.psdvar)
@@ -374,5 +384,6 @@ function moitocbf_solution(dat::CBFData, model::MOI.ModelLike)
         push!(matrix_soln, mati)
         k += veclen
     end
+
     return (scalar_soln, matrix_soln)
 end

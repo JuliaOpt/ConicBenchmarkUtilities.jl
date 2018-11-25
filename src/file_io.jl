@@ -7,6 +7,7 @@ function parsecoords(fd, outputmat::Vector{Tuple{NTuple{N, Int}, Float64}}) wher
         val = parse(Float64, linesplit[end])
         push!(outputmat, (idxs, val))
     end
+    return
 end
 
 function readcbfdata(filename)
@@ -19,7 +20,6 @@ function readcbfdata(filename)
     end
 
     dat = CBFData()
-    dat.name = split(basename(filename), ".")[1]
 
     while !eof(fd)
         line = strip(readline(fd))
@@ -282,5 +282,5 @@ function writecbfdata(filename, dat::CBFData, comments="")
     end
 
     close(fd)
-    return nothing
+    return
 end
