@@ -7,15 +7,19 @@ using GZip
 using Test
 using SCS
 
-MOIU.@model(SCSModelData, (), (),
-    (MOI.Zeros, MOI.Reals, MOI.Nonnegatives, MOI.Nonpositives,
-        MOI.SecondOrderCone, MOI.RotatedSecondOrderCone, MOI.ExponentialCone,
-        MOI.DualExponentialCone, MOI.PowerCone, MOI.DualPowerCone,
-        MOI.PositiveSemidefiniteConeTriangle,),
-    (), (), (), (MOI.VectorOfVariables,), (MOI.VectorAffineFunction,)
+MOIU.@model(ModelData,
+    (MOI.ZeroOne, MOI.Integer),
+    (MOI.EqualTo, MOI.GreaterThan, MOI.LessThan),
+    (MOI.Zeros, MOI.Nonnegatives, MOI.Nonpositives, MOI.SecondOrderCone,
+     MOI.ExponentialCone, MOI.PositiveSemidefiniteConeTriangle),
+    (),
+    (MOI.SingleVariable,),
+    (MOI.ScalarAffineFunction,),
+    (MOI.VectorOfVariables,),
+    (MOI.VectorAffineFunction,)
     )
 
-optimizer = MOIU.CachingOptimizer(SCSModelData{Float64}(),
+optimizer = MOIU.CachingOptimizer(ModelData{Float64}(),
     SCS.Optimizer(eps=1e-6, verbose=false))
 
 examples = Dict{String, NamedTuple}(
@@ -86,11 +90,21 @@ end
 
 @testset "integer problem" begin
     filename = joinpath(@__DIR__, "data", "exAint.cbf")
+
+    # file IO
     dat = readcbfdata(filename)
     cbflines = getcbflines(filename)
     writecbfdata("example_out.cbf", dat, cbflines[1])
     @test getcbflines("example_out.cbf") == cbflines
     rm("example_out.cbf")
+
+    # MOI IO
+    MOI.empty!(optimizer)
+    cbftomoi!(optimizer, dat)
+    intcons = MOI.get(optimizer, MOI.ListOfConstraintIndices{MOI.SingleVariable, MOI.Integer}())
+    ints = [var.variable.value for var in MOI.get(optimizer, MOI.ConstraintFunction(), intcons)]
+    @test length(ints) == 2
+    @test sort(ints) == sort(dat.intlist)
 end
 
 @testset "GZipped CBF file" begin
