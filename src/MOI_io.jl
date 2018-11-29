@@ -301,6 +301,16 @@ function moitocbf(model)
         dat.objbcoord = obj.constant
     end
 
+    function getsetvalue(si)
+        if si isa MOI.EqualTo{Float64}
+            return si.value
+        elseif si isa MOI.GreaterThan{Float64}
+            return si.lower
+        elseif si isa MOI.LessThan{Float64}
+            return si.upper
+        end
+    end
+
     # MOI scalar constraints
     for S in (
         MOI.EqualTo{Float64},
@@ -309,19 +319,21 @@ function moitocbf(model)
         )
         for ci in getmodelcons(MOI.SingleVariable, S)
             dat.ncon += 1
+            si = getconset(ci)
             push!(dat.con, (moitocbf_cone(si), 1))
             push!(dat.acoord, ((dat.ncon, getconfun(ci).variable.value), 1.0))
-            push!(dat.bcoord, ((dat.ncon,), -getconset(ci).value))
+            push!(dat.bcoord, ((dat.ncon,), -getsetvalue(si)))
         end
 
         for ci in getmodelcons(MOI.ScalarAffineFunction{Float64}, S)
             dat.ncon += 1
+            si = getconset(ci)
             push!(dat.con, (moitocbf_cone(si), 1))
             fi = getconfun(ci)
             for vt in fi.terms
                 push!(dat.acoord, ((dat.ncon, vt.variable_index.value), vt.coefficient))
             end
-            push!(dat.bcoord, ((dat.ncon,), fi.constant - getconset(ci).value))
+            push!(dat.bcoord, ((dat.ncon,), fi.constant - getsetvalue(si)))
         end
     end
 
