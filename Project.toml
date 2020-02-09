@@ -11,7 +11,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 JuMP = "~0.18"
-julia = "~0.6, ~0.7, ~1"
+julia = "1"
 
 [extras]
 ECOS = "e2685f51-7e38-5353-a97d-a921fd2c8199"
