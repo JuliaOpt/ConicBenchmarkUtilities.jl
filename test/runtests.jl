@@ -2,16 +2,10 @@ using ECOS, SCS, MathProgBase
 import JuMP
 using ConicBenchmarkUtilities
 
-if VERSION < v"0.7.0-"
-    using Base.Test
-    import Compat: det
-end
+using Test
+using SparseArrays
+using LinearAlgebra
 
-if VERSION > v"0.7.0-"
-    using Test
-    using SparseArrays
-    using LinearAlgebra
-end
 
 @testset "ConicBenchmarkUtilities Tests" begin
 
