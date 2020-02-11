@@ -1,22 +1,14 @@
-__precompile__()
-
 module ConicBenchmarkUtilities
 
 using GZip
 
-if VERSION < v"0.7.0-"
-    import Compat: undef
-    import Compat: @warn
-end
+using SparseArrays
+using LinearAlgebra
 
-if VERSION > v"0.7.0-"
-    using SparseArrays
-    using LinearAlgebra
-    # this is required because findall return type changed in v0.7
-    function SparseArrays.findnz(A::AbstractMatrix)
-        I = findall(!iszero, A)
-        return (getindex.(I, 1), getindex.(I, 2), A[I])
-    end
+# this is required because findnz does not support arrays by default in julia v1
+function SparseArrays.findnz(A::AbstractMatrix)
+    I = findall(!iszero, A)
+    return (getindex.(I, 1), getindex.(I, 2), A[I])
 end
 
 export readcbfdata, cbftompb, mpbtocbf, writecbfdata
